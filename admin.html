@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090f">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin — Fichaje Laboral</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <header class="app-header" id="adminHeader">
+    <div class="app-logo">
+      <div class="app-logo-icon" style="background:linear-gradient(135deg,var(--admin),#7c5bff)">🛡</div>
+      <span class="app-logo-text">Panel Admin</span>
+    </div>
+    <button class="header-action" id="adminLogoutBtn" style="display:none" onclick="Admin.logout()">
+      Cerrar sesión
+    </button>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA: LOGIN ADMIN
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page active" id="page-admin-login">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;
+                justify-content:center; padding:32px 24px;">
+
+      <div style="font-size:56px; margin-bottom:16px;">🛡</div>
+      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Administrador</h1>
+      <p class="text-muted text-sm" style="margin-bottom:32px; text-align:center">
+        Acceso restringido al panel de gestión
+      </p>
+
+      <div style="width:100%; max-width:320px;">
+        <input
+          type="password"
+          inputmode="numeric"
+          class="input-field pin-input"
+          id="adminPinInput"
+          placeholder="• • • •"
+          maxlength="6"
+          autocomplete="off"
+        >
+        <p id="adminLoginError" class="text-sm mt-1"
+           style="color:var(--error); text-align:center; display:none;">
+          PIN incorrecto
+        </p>
+        <button class="btn btn-primary btn-full mt-3" id="adminLoginBtn" onclick="Admin.login()">
+          Acceder
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA: DASHBOARD ADMIN
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page" id="page-admin-dashboard">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="Admin.switchTab('registros')">📋 Registros</button>
+      <button class="tab-btn" onclick="Admin.switchTab('abiertos')">🟢 En jornada</button>
+      <button class="tab-btn" onclick="Admin.switchTab('empleados')">👥 Empleados</button>
+    </div>
+
+    <!-- ── TAB: REGISTROS ──────────────────────────────── -->
+    <div id="tab-registros" class="tab-content">
+
+      <!-- Stats rápidas del día -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <div class="stat-number" id="statTotal" style="color:var(--admin)">—</div>
+          <div class="stat-label">Fichajes hoy</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statEntradas" style="color:var(--entrada)">—</div>
+          <div class="stat-label">Entradas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statSalidas" style="color:var(--salida)">—</div>
+          <div class="stat-label">Salidas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statAbiertos" style="color:var(--warning)">—</div>
+          <div class="stat-label">En jornada</div>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filtros">
+        <input type="date" class="input-field" id="filtroFecha" style="flex:1; min-width:140px;">
+        <select class="input-field" id="filtroEmpleado" style="flex:1; min-width:140px;">
+          <option value="">Todos los empleados</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.consultarRegistros()">🔍 Filtrar</button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarCSV()" title="Exportar CSV">⬇ CSV</button>
+      </div>
+
+      <!-- Tabla de registros -->
+      <div class="p-2" style="overflow-y:auto; flex:1;">
+        <div class="table-wrapper">
+          <table id="tablaRegistros">
+            <thead>
+              <tr>
+                <th>Empleado</th>
+                <th>Tipo</th>
+                <th>Fecha</th>
+                <th>Hora</th>
+                <th>ID Registro</th>
+              </tr>
+            </thead>
+            <tbody id="tablaBody">
+              <tr>
+                <td colspan="5">
+                  <div class="loading-overlay">
+                    <div class="loader"></div>
+                    <span>Cargando...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-muted text-center mt-2" id="tablaInfo"></p>
+      </div>
+
+    </div>
+
+    <!-- ── TAB: EN JORNADA ─────────────────────────────── -->
+    <div id="tab-abiertos" class="tab-content" style="display:none;">
+      <div class="p-3">
+        <div class="section-title">Empleados con jornada activa ahora</div>
+        <div id="listaAbiertos">
+          <div class="loading-overlay">
+            <div class="loader"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── TAB: EMPLEADOS ─────────────────────────────── -->
+    <div id="tab-empleados" class="tab-content" style="display:none;">
+      <div class="p-3">
+
+        <div class="flex justify-between items-center mb-2">
+          <div class="section-title" style="margin-bottom:0">Empleados registrados</div>
+          <button class="btn btn-primary btn-sm" onclick="Admin.abrirModalNuevoEmpleado()">
+            + Nuevo
+          </button>
+        </div>
+
+        <div id="listaEmpleados">
+          <div class="loading-overlay">
+            <div class="loader"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── MODAL: NUEVO EMPLEADO ───────────────────────────────── -->
+<div class="modal-backdrop" id="modalNuevoEmp" onclick="Admin.cerrarModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">➕ Nuevo Empleado</div>
+
+    <div class="input-group mb-2">
+      <label class="input-label">Nombre completo</label>
+      <input type="text" class="input-field" id="nuevoNombre" placeholder="Ej: María García López" autocomplete="off">
+    </div>
+
+    <div class="input-group mb-2">
+      <label class="input-label">PIN (4 dígitos)</label>
+      <input type="text" inputmode="numeric" maxlength="4" class="input-field" id="nuevoPin" placeholder="1234" autocomplete="off">
+    </div>
+
+    <div class="input-group mb-3">
+      <label class="input-label">Email (opcional)</label>
+      <input type="email" class="input-field" id="nuevoEmail" placeholder="empleado@empresa.com" autocomplete="off">
+    </div>
+
+    <p id="nuevoEmpError" class="text-sm mb-2" style="color:var(--error); display:none;"></p>
+
+    <div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm flex-1" onclick="Admin.cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="nuevoEmpBtn" onclick="Admin.crearEmpleado()">Crear empleado</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script src="admin.js"></script>
+</body>
+</html>

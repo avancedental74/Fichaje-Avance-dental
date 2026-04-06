@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Control de fichaje laboral">
+  <title>Fichaje — Mi Empresa</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- PWA manifest opcional -->
+  <!-- <link rel="manifest" href="manifest.json"> -->
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <header class="app-header" id="mainHeader">
+    <div class="app-logo">
+      <div class="app-logo-icon">⏱</div>
+      <span class="app-logo-text" id="empresaNombre">Fichaje</span>
+    </div>
+    <button class="header-action" id="logoutBtn" style="display:none" onclick="App.logout()">
+      Salir
+    </button>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 1: LOGIN (PIN)
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page active" id="page-login">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;
+                justify-content:center; padding: 32px 24px;">
+
+      <!-- Ilustración -->
+      <div style="font-size:56px; margin-bottom:16px;">👤</div>
+      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Identifícate</h1>
+      <p class="text-muted text-sm" style="margin-bottom:32px; text-align:center">
+        Introduce tu PIN de empleado
+      </p>
+
+      <!-- PIN Input -->
+      <div style="width:100%; max-width:320px;">
+        <input
+          type="password"
+          inputmode="numeric"
+          maxlength="4"
+          class="input-field pin-input"
+          id="pinInput"
+          placeholder="• • • •"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+        >
+
+        <!-- Error -->
+        <p id="loginError" class="text-sm mt-1"
+           style="color:var(--error); text-align:center; display:none; min-height:20px;">
+          PIN incorrecto. Inténtalo de nuevo.
+        </p>
+
+        <!-- Botón -->
+        <button class="btn btn-primary btn-full mt-3" id="loginBtn" onclick="App.login()">
+          Acceder
+        </button>
+
+        <p class="text-xs text-muted text-center mt-2">
+          ¿No tienes PIN? Contacta con administración.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 2: PANEL EMPLEADO
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page" id="page-empleado">
+
+    <!-- Estado del empleado -->
+    <div class="status-display" id="statusDisplay">
+      <div class="status-icon libre" id="statusIcon">
+        <span id="statusEmoji">🟡</span>
+      </div>
+      <div class="status-nombre" id="statusNombre">...</div>
+      <div class="status-label" id="statusLabel">Cargando estado...</div>
+      <div class="status-hora" id="relojActual"></div>
+      <div id="ultimaAccion" class="text-sm text-muted" style="margin-top:4px;"></div>
+    </div>
+
+    <!-- Botón de fichaje principal -->
+    <div class="px-3" style="max-width:400px; width:100%; margin:0 auto;">
+      <button class="btn btn-full" id="fichajeBtn"
+              onclick="App.fichar()" disabled>
+        <span class="loader" id="fichajeLoader" style="display:none;"></span>
+        <span id="fichajeBtnText">Cargando...</span>
+      </button>
+      <p class="text-xs text-muted text-center mt-1" id="fichajeSubtexto"></p>
+    </div>
+
+    <div class="divider mt-3"></div>
+
+    <!-- Historial -->
+    <div class="list-section" style="flex:1; overflow-y:auto;">
+      <div class="section-title">Registros recientes</div>
+      <div id="historialLista">
+        <div class="loading-overlay">
+          <div class="loader"></div>
+          <span>Cargando historial...</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ── SPLASH DE CONFIRMACIÓN ───────────────────────────────── -->
+<div class="confirm-splash" id="confirmSplash" onclick="App.cerrarConfirm()">
+  <div class="confirm-icon" id="confirmIcon">✅</div>
+  <div class="confirm-tipo" id="confirmTipo"></div>
+  <div class="confirm-hora" id="confirmHora"></div>
+  <div class="confirm-nombre" id="confirmNombre"></div>
+  <p class="text-sm text-muted" style="margin-top:8px;">Toca para continuar</p>
+</div>
+
+<!-- ── TOAST ─────────────────────────────────────────────────── -->
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
