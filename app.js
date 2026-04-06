@@ -4,7 +4,7 @@
 //  Conectar APPS_SCRIPT_URL con la URL de tu Web App
 // ============================================================
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 const EMPRESA_NOMBRE  = 'Mi Empresa';
 
 // ── ESTADO GLOBAL ────────────────────────────────────────────

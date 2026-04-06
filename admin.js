@@ -3,7 +3,7 @@
 //  Versión: 1.0 MVP
 // ============================================================
 
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/TU_DEPLOYMENT_ID/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 
 // ── ESTADO ADMIN ─────────────────────────────────────────────
 const AdminState = {
