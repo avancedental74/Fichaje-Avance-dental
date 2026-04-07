@@ -15,9 +15,10 @@
       "purpose": "any maskable"
     },
     {
-      "src": "./admin-icon-192.png",
+      "src": "./admin-icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "categories": ["business", "productivity"]

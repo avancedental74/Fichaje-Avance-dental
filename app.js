@@ -4,7 +4,7 @@
 // ============================================================
 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
-const EMPRESA_NOMBRE  = 'Mi Empresa';
+const EMPRESA_NOMBRE  = 'Avance Dental';
 
 // ── ESTADO GLOBAL ────────────────────────────────────────────
 const State = {
@@ -81,7 +81,7 @@ async function apiPost(body) {
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       signal:  controller.signal,
       body:    JSON.stringify({
         ...body,

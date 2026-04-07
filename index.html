@@ -50,6 +50,10 @@
       <div class="app-logo-icon" role="img" aria-label="Fichaje">⏱</div>
       <span class="app-logo-text" id="empresaNombre">Fichaje</span>
     </div>
+    <button class="header-action" id="installBtn" style="display:none"
+            onclick="installPWA()" aria-label="Instalar aplicación">
+      📲 Instalar
+    </button>
     <button class="header-action" id="logoutBtn" style="display:none"
             onclick="App.logout()" aria-label="Cerrar sesión">
       Salir
@@ -174,8 +178,30 @@
 <!-- ── TOAST ───────────────────────────────────────────────── -->
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=2.2"></script>
+<script src="app.js?v=2.4"></script>
 <script>
+  // ── PWA INSTALL ─────────────────────────────────────────────
+  let deferredPrompt;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('installBtn').style.display = '';
+  });
+
+  function installPWA() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((result) => {
+      if (result.outcome === 'accepted') {
+        console.log('PWA instalada');
+      }
+      deferredPrompt = null;
+      document.getElementById('installBtn').style.display = 'none';
+    });
+  }
+
+  // ── SERVICE WORKER ───────────────────────────────────────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('service-worker.js')
