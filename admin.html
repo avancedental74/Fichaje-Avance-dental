@@ -2,41 +2,66 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090f" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#09090f">
+  <meta name="description" content="Panel de administración — Fichaje Laboral">
   <meta name="robots" content="noindex, nofollow">
   <title>Admin — Fichaje Laboral</title>
+
+  <!-- PWA: iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin Fichaje">
+
+  <!-- PWA iconos iOS -->
+  <link rel="apple-touch-icon" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-96.png">
+
+  <!-- Fuentes + CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="styles.css">
+  <link rel="preload" href="admin.js" as="script">
 </head>
 <body>
 
 <div class="app-container">
 
-  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <!-- ── HEADER ────────────────────────────────────────────── -->
   <header class="app-header" id="adminHeader">
     <div class="app-logo">
-      <div class="app-logo-icon" style="background:linear-gradient(135deg,var(--admin),#7c5bff)">🛡</div>
+      <div class="app-logo-icon"
+           style="background:linear-gradient(135deg,var(--admin),#7c5bff)"
+           role="img" aria-label="Admin">🛡</div>
       <span class="app-logo-text">Panel Admin</span>
     </div>
-    <button class="header-action" id="adminLogoutBtn" style="display:none" onclick="Admin.logout()">
+    <button class="header-action" id="adminLogoutBtn" style="display:none"
+            onclick="Admin.logout()" aria-label="Cerrar sesión de administrador">
       Cerrar sesión
     </button>
   </header>
 
   <!-- ═══════════════════════════════════════════════════════
-       PÁGINA 0: SETUP — PRIMER ADMINISTRADOR
-       Solo se muestra si no existe ningún admin en el sistema
+       PÁGINA 0: SETUP — PRIMER ADMIN
   ════════════════════════════════════════════════════════════ -->
-  <div class="page" id="page-setup">
+  <div class="page" id="page-setup" role="main">
     <div style="flex:1; display:flex; flex-direction:column; align-items:center;
-                justify-content:center; padding:32px 24px;">
+                justify-content:center; padding:32px 24px; overflow-y:auto;
+                -webkit-overflow-scrolling:touch;">
 
-      <div style="font-size:56px; margin-bottom:16px;">⚙️</div>
-      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Configuración inicial</h1>
-      <p class="text-muted text-sm" style="margin-bottom:8px; text-align:center">
+      <div style="font-size:54px; margin-bottom:16px;" aria-hidden="true">⚙️</div>
+      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+        Configuración inicial
+      </h1>
+      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:6px; text-align:center;">
         No existe ningún administrador. Crea el primero para activar el sistema.
       </p>
-      <p class="text-xs text-muted text-center" style="margin-bottom:28px;">
+      <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:28px;">
         Necesitarás la <strong style="color:var(--warning)">clave de instalación</strong>
         definida en el backend (BOOTSTRAP_SECRET).
       </p>
@@ -44,39 +69,46 @@
       <div style="width:100%; max-width:360px;">
 
         <div class="input-group mb-2">
-          <label class="input-label">Clave de instalación</label>
+          <label class="input-label" for="setupSecret">Clave de instalación</label>
           <input type="password" class="input-field" id="setupSecret"
-                 placeholder="Clave definida en Code.gs" autocomplete="off">
+                 placeholder="Clave definida en Code.gs"
+                 autocomplete="off" autocorrect="off" autocapitalize="off">
         </div>
 
         <div class="input-group mb-2">
-          <label class="input-label">Tu nombre</label>
+          <label class="input-label" for="setupNombre">Tu nombre</label>
           <input type="text" class="input-field" id="setupNombre"
-                 placeholder="Ej: Carlos García" autocomplete="off">
+                 placeholder="Ej: Carlos García"
+                 autocomplete="name">
         </div>
 
         <div class="input-group mb-2">
-          <label class="input-label">PIN de administrador (4–6 dígitos)</label>
-          <input type="text" inputmode="numeric" maxlength="6"
+          <label class="input-label" for="setupPin">PIN de administrador (4–6 dígitos)</label>
+          <input type="password" inputmode="numeric" maxlength="6"
                  class="input-field pin-input" id="setupPin"
-                 placeholder="• • • •" autocomplete="off">
-          <span class="text-xs text-muted">Recuérdalo bien. No hay recuperación automática.</span>
+                 placeholder="• • • •"
+                 autocomplete="new-password">
+          <span style="font-size:12px; color:var(--text-muted);">
+            Recuérdalo bien. No hay recuperación automática.
+          </span>
         </div>
 
         <div class="input-group mb-3">
-          <label class="input-label">Email (opcional)</label>
+          <label class="input-label" for="setupEmail">Email (opcional)</label>
           <input type="email" class="input-field" id="setupEmail"
-                 placeholder="admin@empresa.com" autocomplete="off">
+                 placeholder="admin@empresa.com"
+                 autocomplete="email">
         </div>
 
-        <p id="setupError" class="text-sm mb-2"
-           style="color:var(--error); text-align:center; display:none;"></p>
+        <p id="setupError" role="alert" aria-live="polite"
+           style="color:var(--error); font-size:13px; text-align:center; display:none; margin-bottom:12px;"></p>
 
-        <button class="btn btn-primary btn-full" id="setupBtn" onclick="Setup.crear()">
+        <button class="btn btn-primary btn-full" id="setupBtn"
+                onclick="Setup.crear()" style="font-size:17px;">
           Crear administrador
         </button>
 
-        <p class="text-xs text-muted text-center mt-2">
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:14px;">
           Este formulario se desactivará automáticamente tras crear el primer administrador.
         </p>
       </div>
@@ -87,18 +119,20 @@
   <!-- ═══════════════════════════════════════════════════════
        PÁGINA 1: LOGIN ADMIN
   ════════════════════════════════════════════════════════════ -->
-  <div class="page active" id="page-admin-login">
+  <div class="page active" id="page-admin-login" role="main">
     <div style="flex:1; display:flex; flex-direction:column; align-items:center;
                 justify-content:center; padding:32px 24px;">
 
-      <div style="font-size:56px; margin-bottom:16px;">🛡</div>
-      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Administrador</h1>
-      <p class="text-muted text-sm" style="margin-bottom:32px; text-align:center">
+      <div style="font-size:60px; margin-bottom:20px; line-height:1;" aria-hidden="true">🛡</div>
+      <h1 style="font-size:24px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+        Administrador
+      </h1>
+      <p style="color:var(--text-secondary); font-size:15px; margin-bottom:36px; text-align:center;">
         Acceso restringido al panel de gestión
       </p>
 
       <div style="width:100%; max-width:320px;">
-        <p class="text-xs text-muted text-center" style="margin-bottom:8px;">
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:10px;">
           Introduce tu PIN de administrador
         </p>
         <input
@@ -109,12 +143,20 @@
           placeholder="• • • •"
           maxlength="6"
           autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="PIN de administrador"
+          aria-describedby="adminLoginError"
         >
-        <p id="adminLoginError" class="text-sm mt-1"
-           style="color:var(--error); text-align:center; display:none;">
+        <p id="adminLoginError"
+           role="alert"
+           aria-live="polite"
+           style="color:var(--error); font-size:13px; text-align:center;
+                  min-height:20px; margin-top:8px; display:none;">
           PIN incorrecto
         </p>
-        <button class="btn btn-primary btn-full mt-3" id="adminLoginBtn" onclick="Admin.login()">
+        <button class="btn btn-primary btn-full mt-3" id="adminLoginBtn"
+                onclick="Admin.login()" style="font-size:17px;">
           Acceder
         </button>
       </div>
@@ -127,16 +169,27 @@
   ════════════════════════════════════════════════════════════ -->
   <div class="page" id="page-admin-dashboard">
 
-    <!-- TABS -->
-    <div class="tabs">
-      <button class="tab-btn active" onclick="Admin.switchTab('registros')">📋 Registros</button>
-      <button class="tab-btn" onclick="Admin.switchTab('abiertos')">🟢 En jornada</button>
-      <button class="tab-btn" onclick="Admin.switchTab('empleados')">👥 Empleados</button>
-    </div>
+    <!-- TABS sticky debajo del header -->
+    <nav class="tabs" role="tablist" aria-label="Secciones del panel">
+      <button class="tab-btn active" role="tab" aria-selected="true"
+              onclick="Admin.switchTab('registros')" id="tab-btn-registros">
+        📋 Registros
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              onclick="Admin.switchTab('abiertos')" id="tab-btn-abiertos">
+        🟢 En jornada
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              onclick="Admin.switchTab('empleados')" id="tab-btn-empleados">
+        👥 Empleados
+      </button>
+    </nav>
 
     <!-- ── TAB: REGISTROS ──────────────────────────────── -->
-    <div id="tab-registros" class="tab-content">
+    <div id="tab-registros" class="tab-content"
+         role="tabpanel" aria-labelledby="tab-btn-registros">
 
+      <!-- Stats -->
       <div class="stats-grid" id="statsGrid">
         <div class="stat-card">
           <div class="stat-number" id="statTotal" style="color:var(--admin)">—</div>
@@ -156,26 +209,40 @@
         </div>
       </div>
 
+      <!-- Filtros -->
       <div class="filtros">
-        <input type="date" class="input-field" id="filtroFecha" style="flex:1; min-width:140px;">
-        <button class="btn btn-ghost btn-sm" onclick="Admin.irAHoy()" title="Ver hoy">📅 Hoy</button>
-        <select class="input-field" id="filtroEmpleado" style="flex:1; min-width:140px;">
+        <input type="date" class="input-field" id="filtroFecha"
+               aria-label="Filtrar por fecha">
+        <button class="btn btn-ghost btn-sm" onclick="Admin.irAHoy()"
+                title="Ver hoy" aria-label="Ver registros de hoy">
+          📅 Hoy
+        </button>
+        <select class="input-field" id="filtroEmpleado"
+                aria-label="Filtrar por empleado">
           <option value="">Todos los empleados</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="Admin.consultarRegistros()">🔍 Filtrar</button>
-        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarCSV()" title="Exportar CSV">⬇ CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.consultarRegistros()"
+                aria-label="Aplicar filtros">
+          🔍 Filtrar
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarCSV()"
+                title="Exportar CSV" aria-label="Descargar CSV">
+          ⬇ CSV
+        </button>
       </div>
 
-      <div class="p-2" style="overflow-y:auto; flex:1;">
+      <!-- Tabla -->
+      <div style="padding:0 var(--s2) var(--s2); overflow-y:auto; flex:1;
+                  -webkit-overflow-scrolling:touch;">
         <div class="table-wrapper">
-          <table id="tablaRegistros">
+          <table id="tablaRegistros" aria-label="Registros de fichaje">
             <thead>
               <tr>
-                <th data-col="nombre"     onclick="Admin.sortTabla('nombre')"     class="sortable">Empleado ↕</th>
-                <th data-col="tipo"       onclick="Admin.sortTabla('tipo')"       class="sortable">Tipo ↕</th>
-                <th data-col="fecha"      onclick="Admin.sortTabla('fecha')"      class="sortable">Fecha ↕</th>
-                <th data-col="hora"       onclick="Admin.sortTabla('hora')"       class="sortable">Hora ↕</th>
-                <th data-col="idRegistro">ID Registro</th>
+                <th data-col="nombre"  onclick="Admin.sortTabla('nombre')"  class="sortable">Empleado ↕</th>
+                <th data-col="tipo"    onclick="Admin.sortTabla('tipo')"    class="sortable">Tipo ↕</th>
+                <th data-col="fecha"   onclick="Admin.sortTabla('fecha')"   class="sortable">Fecha ↕</th>
+                <th data-col="hora"    onclick="Admin.sortTabla('hora')"    class="sortable">Hora ↕</th>
+                <th data-col="idRegistro">ID</th>
               </tr>
             </thead>
             <tbody id="tablaBody">
@@ -190,17 +257,23 @@
             </tbody>
           </table>
         </div>
-        <p class="text-xs text-muted text-center mt-2" id="tablaInfo"></p>
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:10px;"
+           id="tablaInfo" aria-live="polite"></p>
       </div>
 
     </div>
 
     <!-- ── TAB: EN JORNADA ─────────────────────────────── -->
-    <div id="tab-abiertos" class="tab-content" style="display:none;">
-      <div class="p-3">
-        <div class="flex justify-between items-center mb-2">
-          <div class="section-title" style="margin-bottom:0">Empleados con jornada activa ahora</div>
-          <button class="btn btn-ghost btn-sm" onclick="Admin.consultarAbiertos()">↻ Actualizar</button>
+    <div id="tab-abiertos" class="tab-content" style="display:none;"
+         role="tabpanel" aria-labelledby="tab-btn-abiertos">
+      <div style="padding:var(--s3);">
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    margin-bottom:var(--s2);">
+          <div class="section-title" style="margin-bottom:0;">
+            Empleados con jornada activa
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="Admin.consultarAbiertos()"
+                  aria-label="Actualizar lista">↻ Actualizar</button>
         </div>
         <div id="listaAbiertos">
           <div class="loading-overlay">
@@ -208,18 +281,24 @@
             <span>Cargando...</span>
           </div>
         </div>
-        <p class="text-xs text-muted text-center mt-2">Se actualiza automáticamente cada 60 segundos</p>
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:10px;">
+          Se actualiza automáticamente cada 60 s
+        </p>
       </div>
     </div>
 
     <!-- ── TAB: EMPLEADOS ─────────────────────────────── -->
-    <div id="tab-empleados" class="tab-content" style="display:none;">
-      <div class="p-3">
+    <div id="tab-empleados" class="tab-content" style="display:none;"
+         role="tabpanel" aria-labelledby="tab-btn-empleados">
+      <div style="padding:var(--s3);">
 
-        <div class="flex justify-between items-center mb-2">
-          <div class="section-title" style="margin-bottom:0">Empleados registrados</div>
-          <button class="btn btn-primary btn-sm" onclick="Admin.abrirModalNuevoEmpleado()">
-            + Nuevo
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    margin-bottom:var(--s2);">
+          <div class="section-title" style="margin-bottom:0;">Empleados registrados</div>
+          <button class="btn btn-primary btn-sm"
+                  onclick="Admin.abrirModalNuevoEmpleado()"
+                  aria-label="Crear nuevo empleado">
+            ＋ Nuevo
           </button>
         </div>
 
@@ -233,41 +312,49 @@
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /page-admin-dashboard -->
+</div><!-- /app-container -->
 
-<!-- ── MODAL: CREAR / EDITAR EMPLEADO ───────────────────────── -->
-<div class="modal-backdrop" id="modalNuevoEmp" onclick="Admin.cerrarModal()">
+<!-- ── MODAL: CREAR / EDITAR EMPLEADO ─────────────────────── -->
+<div class="modal-backdrop" id="modalNuevoEmp"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="modalEmpTitulo"
+     onclick="Admin.cerrarModal()">
   <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-handle"></div>
+    <div class="modal-handle" aria-hidden="true"></div>
     <div class="modal-title" id="modalEmpTitulo">➕ Nuevo Empleado</div>
 
     <input type="hidden" id="nuevoEmpId">
 
     <div class="input-group mb-2">
-      <label class="input-label">Nombre completo</label>
+      <label class="input-label" for="nuevoNombre">Nombre completo</label>
       <input type="text" class="input-field" id="nuevoNombre"
-             placeholder="Ej: María García López" autocomplete="off">
+             placeholder="Ej: María García López"
+             autocomplete="name">
     </div>
 
     <div class="input-group mb-2">
-      <label class="input-label">PIN (4 dígitos)</label>
+      <label class="input-label" for="nuevoPin">PIN (4 dígitos)</label>
       <input type="text" inputmode="numeric" maxlength="4"
              class="input-field" id="nuevoPin"
-             placeholder="1234" autocomplete="off">
-      <span class="text-xs text-muted" id="nuevoPinHint"></span>
+             placeholder="1234"
+             autocomplete="new-password">
+      <span style="font-size:12px; color:var(--text-muted);" id="nuevoPinHint"></span>
     </div>
 
     <div class="input-group mb-3">
-      <label class="input-label">Email (opcional)</label>
+      <label class="input-label" for="nuevoEmail">Email (opcional)</label>
       <input type="email" class="input-field" id="nuevoEmail"
-             placeholder="empleado@empresa.com" autocomplete="off">
+             placeholder="empleado@empresa.com"
+             autocomplete="email">
     </div>
 
-    <!-- ─── BLOQUE DE PIN CREADO — se muestra tras crear empleado ─── -->
+    <!-- PIN creado — visible solo después de crear -->
     <div id="pinVisualWrapper" style="display:none; margin-bottom:16px;">
-      <div style="background:var(--entrada-dim); border:1px solid rgba(0,214,143,0.3);
-                  border-radius:var(--radius); padding:16px; text-align:center;">
+      <div style="background:var(--entrada-dim);
+                  border:1px solid rgba(0,214,143,0.25);
+                  border-radius:var(--radius); padding:18px; text-align:center;">
         <div style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">
           ✅ Empleado creado:
           <strong id="pinVisualNombre" style="color:var(--text-primary)"></strong>
@@ -275,13 +362,13 @@
         <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">
           ID: <span id="pinVisualId" style="font-family:monospace;"></span>
         </div>
-        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:6px;">
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:8px;">
           PIN para entregar al empleado:
         </div>
-        <div style="font-size:40px; font-weight:700; letter-spacing:0.3em;
+        <div style="font-size:44px; font-weight:700; letter-spacing:0.35em;
                     color:var(--entrada); font-variant-numeric:tabular-nums;"
              id="pinVisualPin"></div>
-        <p class="text-xs text-muted" style="margin-top:8px;">
+        <p style="font-size:12px; color:var(--text-muted); margin-top:10px;">
           ⚠️ Anótalo ahora. No podrás consultarlo de nuevo.
         </p>
         <button class="btn btn-primary btn-sm mt-2" style="width:100%"
@@ -290,35 +377,40 @@
         </button>
       </div>
     </div>
-    <!-- ─────────────────────────────────────────────────────────── -->
 
-    <p id="nuevoEmpError" class="text-sm mb-2" style="color:var(--error); display:none;"></p>
+    <p id="nuevoEmpError" role="alert" aria-live="polite"
+       style="color:var(--error); font-size:13px; display:none; margin-bottom:12px;"></p>
 
-    <div class="flex gap-2">
-      <button class="btn btn-ghost btn-sm flex-1" onclick="Admin.cerrarModal()">Cancelar</button>
-      <button class="btn btn-primary flex-1" id="nuevoEmpBtn" onclick="Admin.crearEmpleado()">
-        Crear empleado
-      </button>
+    <div style="display:flex; gap:var(--s2);">
+      <button class="btn btn-ghost btn-sm flex-1"
+              onclick="Admin.cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="nuevoEmpBtn"
+              onclick="Admin.crearEmpleado()">Crear empleado</button>
     </div>
 
   </div>
 </div>
 
-<!-- ── MODAL: CONFIRMACIÓN ────────────────────────────────────── -->
-<div class="modal-backdrop" id="modalConfirm">
-  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px;">
-    <div class="modal-handle"></div>
+<!-- ── MODAL: CONFIRMACIÓN ────────────────────────────────── -->
+<div class="modal-backdrop" id="modalConfirm"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="confirmModalTitulo">
+  <div class="modal" onclick="event.stopPropagation()"
+       style="max-width:380px;">
+    <div class="modal-handle" aria-hidden="true"></div>
     <div class="modal-title" id="confirmModalTitulo">¿Confirmar acción?</div>
-    <p class="text-sm text-muted mb-3" id="confirmModalMensaje"></p>
-    <div class="flex gap-2">
+    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:var(--s3);"
+       id="confirmModalMensaje"></p>
+    <div style="display:flex; gap:var(--s2);">
       <button class="btn btn-ghost btn-sm flex-1" id="confirmModalCancel">Cancelar</button>
       <button class="btn btn-danger flex-1" id="confirmModalOk">Confirmar</button>
     </div>
   </div>
 </div>
 
-<!-- ── TOAST ──────────────────────────────────────────────────── -->
-<div id="toast"></div>
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script src="admin.js"></script>
 </body>

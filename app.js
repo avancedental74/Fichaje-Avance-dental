@@ -1,18 +1,17 @@
 // ============================================================
 //  FICHAJE LABORAL — app.js (Empleado)
-//  Versión: 2.0
+//  Versión: 1.1 — Fixes UX aplicados
 // ============================================================
 
-// ⚠️ CAMBIA ESTA URL por la URL de tu Web App de Google Apps Script
-const APPS_SCRIPT_URL = 'TU_URL_DE_APPS_SCRIPT_AQUI';
-const EMPRESA_NOMBRE  = 'Mi Empresa'; // Cambia por el nombre de tu empresa
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
+const EMPRESA_NOMBRE  = 'Mi Empresa';
 
 // ── ESTADO GLOBAL ────────────────────────────────────────────
 const State = {
-  pin:          null,
-  nombre:       null,
-  estado:       null,   // LIBRE | EN_JORNADA | JORNADA_CERRADA
-  relojTimer:   null,
+  pin:        null,
+  nombre:     null,
+  estado:     null,   // LIBRE | EN_JORNADA | JORNADA_CERRADA
+  relojTimer: null,
   pollingTimer: null
 };
 
@@ -33,12 +32,12 @@ function showPage(id) {
 
 function formatFechaLegible(fechaISO) {
   if (!fechaISO) return '';
-  const [año, mes, dia] = String(fechaISO).split('-');
+  const [año, mes, dia] = fechaISO.split('-');
   const meses = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   return `${dia} ${meses[parseInt(mes)]} ${año}`;
 }
 
-// Calcular duración entre dos horas "HH:MM:SS"
+// FIX M2: Calcular duración entre dos horas "HH:MM:SS"
 function calcularDuracion(horaEntrada, horaSalida) {
   if (!horaEntrada || !horaSalida) return null;
   const toSec = h => {
@@ -58,6 +57,7 @@ function haptic() {
 
 // ── API ──────────────────────────────────────────────────────
 
+// FIX C2: mensajes de error de red diferenciados
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -116,6 +116,7 @@ const App = {
       if (e.key === 'Enter') this.login();
     });
 
+    // FIX C1: limpiar sessionStorage corrupto antes de auto-login
     const pinGuardado = sessionStorage.getItem('fichaje_pin');
     if (pinGuardado) {
       State.pin = pinGuardado;
@@ -130,6 +131,7 @@ const App = {
     const btn      = document.getElementById('loginBtn');
     const error    = document.getElementById('loginError');
 
+    // FIX A1/C3: validación clara de formato
     if (!pin || !/^\d{4}$/.test(pin)) {
       error.textContent = 'El PIN debe tener exactamente 4 dígitos numéricos.';
       error.style.display = 'block';
@@ -145,11 +147,7 @@ const App = {
       const resp = await apiGet({ accion: 'estado', pin });
 
       if (!resp.ok) {
-        // Distinguir cuenta inactiva de PIN incorrecto
-        const msg = resp.error && resp.error.includes('inactiva')
-          ? 'Cuenta inactiva. Contacta con administración.'
-          : 'PIN incorrecto. Inténtalo de nuevo.';
-        error.textContent = msg;
+        error.textContent = 'PIN incorrecto. Inténtalo de nuevo.';
         error.style.display = 'block';
         pinInput.value = '';
         pinInput.focus();
@@ -167,8 +165,10 @@ const App = {
       document.getElementById('logoutBtn').style.display = '';
 
     } catch (err) {
+      // FIX C2: mensaje diferenciado
       error.textContent = mensajeError(err);
       error.style.display = 'block';
+      console.error(err);
     } finally {
       btn.disabled    = false;
       btn.textContent = 'Acceder';
@@ -193,6 +193,7 @@ const App = {
     try {
       const resp = await apiGet({ accion: 'estado', pin: State.pin });
       if (!resp.ok) {
+        // FIX C1: limpiar sesión corrupta
         sessionStorage.removeItem('fichaje_pin');
         this.logout();
         return;
@@ -204,6 +205,7 @@ const App = {
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
     } catch (_) {
+      // FIX C1: limpiar sesión en error de red también
       sessionStorage.removeItem('fichaje_pin');
       this.logout();
     }
@@ -298,8 +300,10 @@ const App = {
 
     } catch (err) {
       loader.style.display = 'none';
+      // FIX C2: mensaje diferenciado
       toast(mensajeError(err), 'error');
       btn.disabled = false;
+      console.error(err);
     }
   },
 
@@ -326,6 +330,7 @@ const App = {
     splash.className = 'confirm-splash show ' + (esEntrada ? 'entrada' : 'salida');
     haptic();
 
+    // FIX B1: 6 segundos en lugar de 4
     clearTimeout(App._confirmTimer);
     App._confirmTimer = setTimeout(() => this.cerrarConfirm(), 6000);
   },
@@ -338,7 +343,7 @@ const App = {
   // ── HISTORIAL ──────────────────────────────────────────────
   async cargarHistorial() {
     const lista = document.getElementById('historialLista');
-    lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando historial...</span></div>';
+    lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div>';
 
     try {
       const resp = await apiGet({ accion: 'historial', pin: State.pin, limite: 20 });
@@ -350,10 +355,12 @@ const App = {
 
       const registros = resp.data.registros;
       if (!registros.length) {
+        // FIX M4: empty state con instrucción útil
         lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div>Cuando registres tu primera entrada, aparecerá aquí.</div>';
         return;
       }
 
+      // Agrupar por fecha
       const porFecha = {};
       registros.forEach(r => {
         if (!porFecha[r.fecha]) porFecha[r.fecha] = [];
@@ -364,6 +371,7 @@ const App = {
       Object.entries(porFecha).forEach(([fecha, regs], gi) => {
         html += `<div class="section-title" style="margin-top:${gi > 0 ? '16px' : '0'}">${formatFechaLegible(fecha)}</div>`;
 
+        // FIX M2: calcular duración de jornada por día
         const entradas = regs.filter(r => r.tipo === 'ENTRADA');
         const salidas  = regs.filter(r => r.tipo === 'SALIDA');
         let duracion = null;
@@ -398,6 +406,7 @@ const App = {
 
     } catch (err) {
       lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div>Error al cargar historial.</div>';
+      console.error(err);
     }
   },
 

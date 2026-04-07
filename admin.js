@@ -1,10 +1,9 @@
 // ============================================================
 //  FICHAJE LABORAL — admin.js (Panel Administrador)
-//  Versión: 2.0 — Bootstrap + gestión completa de empleados
+//  Versión: 1.1 — Fixes UX aplicados
 // ============================================================
 
-// ⚠️ CAMBIA ESTA URL por la URL de tu Web App de Google Apps Script
-const APPS_SCRIPT_URL = 'TU_URL_DE_APPS_SCRIPT_AQUI';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 
 // ── ESTADO ADMIN ─────────────────────────────────────────────
 const AdminState = {
@@ -34,7 +33,7 @@ function showPage(id) {
 
 function formatFechaLegible(fechaISO) {
   if (!fechaISO) return '—';
-  const [año, mes, dia] = String(fechaISO).split('-');
+  const [año, mes, dia] = fechaISO.split('-');
   const meses = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   return `${dia} ${meses[parseInt(mes)]} ${año}`;
 }
@@ -44,6 +43,7 @@ function fechaHoy() {
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 }
 
+// FIX C2: mensajes de error diferenciados
 function mensajeError(err) {
   if (err?.message === 'TIMEOUT') return 'El servidor tardó demasiado. Inténtalo en unos segundos.';
   if (err?.message === 'NETWORK') return 'Sin conexión. Comprueba tu red e inténtalo de nuevo.';
@@ -56,7 +56,7 @@ async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 15000);
+  const timeout    = setTimeout(() => controller.abort(), 12000);
   try {
     const res = await fetch(url.toString(), { signal: controller.signal });
     clearTimeout(timeout);
@@ -70,7 +70,7 @@ async function apiGet(params) {
 
 async function apiPost(body) {
   const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 15000);
+  const timeout    = setTimeout(() => controller.abort(), 12000);
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
@@ -88,99 +88,6 @@ async function apiPost(body) {
 }
 
 // ============================================================
-//  BOOTSTRAP — Comprueba si existe admin al cargar
-// ============================================================
-
-async function checkSetup() {
-  try {
-    const resp = await apiGet({ accion: 'check_setup' });
-    if (resp.ok && !resp.data.adminExists) {
-      showPage('page-setup');
-    } else {
-      // Intentar auto-login si hay PIN en sesión
-      const pinGuardado = sessionStorage.getItem('admin_pin');
-      if (pinGuardado) {
-        document.getElementById('adminPinInput').value = pinGuardado;
-        Admin.login();
-      } else {
-        showPage('page-admin-login');
-      }
-    }
-  } catch (_) {
-    // En error de red, mostrar login igualmente
-    showPage('page-admin-login');
-  }
-}
-
-// ============================================================
-//  SETUP — Crear primer administrador
-// ============================================================
-
-const Setup = {
-
-  async crear() {
-    const secret  = document.getElementById('setupSecret').value.trim();
-    const nombre  = document.getElementById('setupNombre').value.trim();
-    const pin     = document.getElementById('setupPin').value.trim();
-    const email   = document.getElementById('setupEmail').value.trim();
-    const error   = document.getElementById('setupError');
-    const btn     = document.getElementById('setupBtn');
-
-    // Validaciones frontend
-    if (!secret) {
-      error.textContent = 'Introduce la clave de instalación.';
-      error.style.display = 'block';
-      return;
-    }
-    if (!nombre || nombre.length < 2) {
-      error.textContent = 'El nombre es obligatorio.';
-      error.style.display = 'block';
-      return;
-    }
-    if (!/^\d{4,6}$/.test(pin)) {
-      error.textContent = 'El PIN debe tener entre 4 y 6 dígitos numéricos.';
-      error.style.display = 'block';
-      return;
-    }
-
-    btn.disabled    = true;
-    btn.innerHTML   = '<span class="loader"></span> Creando...';
-    error.style.display = 'none';
-
-    try {
-      const resp = await apiPost({
-        accion:          'bootstrap_admin',
-        bootstrapSecret: secret,
-        nombre,
-        pin,
-        email
-      });
-
-      if (!resp.ok) {
-        error.textContent   = resp.error || 'Error al crear el administrador.';
-        error.style.display = 'block';
-        return;
-      }
-
-      // Éxito: auto-login inmediato
-      AdminState.pinAdmin = pin;
-      sessionStorage.setItem('admin_pin', pin);
-      toast('✅ Administrador creado. Bienvenido/a.', 'success', 5000);
-      await Admin.cargarDashboard();
-      showPage('page-admin-dashboard');
-      document.getElementById('adminLogoutBtn').style.display = '';
-
-    } catch (err) {
-      error.textContent   = mensajeError(err);
-      error.style.display = 'block';
-    } finally {
-      btn.disabled    = false;
-      btn.textContent = 'Crear administrador';
-    }
-  }
-};
-
-// ============================================================
 //  ADMIN PRINCIPAL
 // ============================================================
 
@@ -193,6 +100,7 @@ const Admin = {
     const btn      = document.getElementById('adminLoginBtn');
     const error    = document.getElementById('adminLoginError');
 
+    // FIX C3: validar que hay algo antes de llamar al servidor
     if (!pin || pin.length < 4) {
       error.textContent   = 'Introduce tu PIN de administrador.';
       error.style.display = 'block';
@@ -208,6 +116,7 @@ const Admin = {
       const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: pin });
 
       if (!resp.ok) {
+        // FIX C1: limpiar sessionStorage si el PIN guardado es incorrecto
         sessionStorage.removeItem('admin_pin');
         error.textContent   = 'PIN de administrador incorrecto.';
         error.style.display = 'block';
@@ -225,7 +134,9 @@ const Admin = {
       document.getElementById('adminLogoutBtn').style.display = '';
 
     } catch (err) {
+      // FIX C1: limpiar sesión en error también para evitar bucle
       sessionStorage.removeItem('admin_pin');
+      // FIX C2: mensaje diferenciado
       error.textContent   = mensajeError(err);
       error.style.display = 'block';
     } finally {
@@ -243,19 +154,11 @@ const Admin = {
     showPage('page-admin-login');
   },
 
-  // Carga el dashboard sin necesidad de volver al login
-  async cargarDashboard() {
-    const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: AdminState.pinAdmin });
-    if (resp.ok) {
-      AdminState.empleados = resp.data.empleados;
-      this.inicializar(resp.data.empleados);
-    }
-  },
-
   // ── INIT DASHBOARD ─────────────────────────────────────────
   inicializar(empleados) {
     document.getElementById('filtroFecha').value = fechaHoy();
 
+    // Poblar select de empleados
     const sel = document.getElementById('filtroEmpleado');
     sel.innerHTML = '<option value="">Todos los empleados</option>';
     empleados.filter(e => e.activo).forEach(e => {
@@ -266,6 +169,7 @@ const Admin = {
     this.consultarAbiertos();
     this.renderEmpleados(empleados);
 
+    // FIX M1: polling automático cada 60 segundos
     clearInterval(AdminState.pollingTimer);
     AdminState.pollingTimer = setInterval(() => {
       if (AdminState.tabActual === 'abiertos') this.consultarAbiertos();
@@ -329,13 +233,18 @@ const Admin = {
       this.actualizarStatAbiertos();
 
     } catch (err) {
+      // FIX C2: mensaje diferenciado
       tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--error)">${mensajeError(err)}</td></tr>`;
+      console.error(err);
     }
   },
 
+  // FIX B2: tabla ordenable
   renderTabla(registros) {
     const tbody = document.getElementById('tablaBody');
+    const cols  = ['nombre', 'tipo', 'fecha', 'hora', 'idRegistro'];
 
+    // Actualizar indicadores de orden en cabeceras
     document.querySelectorAll('thead th[data-col]').forEach(th => {
       const col = th.dataset.col;
       th.classList.toggle('sorted-asc',  AdminState.sortCol === col && AdminState.sortDir === 'asc');
@@ -363,7 +272,7 @@ const Admin = {
         </td>
         <td>${formatFechaLegible(r.fecha)}</td>
         <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
-        <td class="text-xs text-muted" style="font-family:monospace;">${String(r.idRegistro).slice(0, 12)}…</td>
+        <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0, 8)}…</td>
       </tr>
     `).join('');
   },
@@ -378,6 +287,7 @@ const Admin = {
     if (AdminState.registros.length) this.renderTabla(AdminState.registros);
   },
 
+  // FIX M5: ir a hoy rápidamente
   irAHoy() {
     document.getElementById('filtroFecha').value = fechaHoy();
     this.consultarRegistros();
@@ -422,6 +332,7 @@ const Admin = {
 
     } catch (err) {
       lista.innerHTML = `<div class="empty-state">${mensajeError(err)}</div>`;
+      console.error(err);
     }
   },
 
@@ -446,7 +357,7 @@ const Admin = {
     const lista = document.getElementById('listaEmpleados');
 
     if (!empleados.length) {
-      lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div>No hay empleados. Crea el primero con el botón "＋ Nuevo".</div>';
+      lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div>No hay empleados registrados. Crea el primero con el botón "＋ Nuevo".</div>';
       return;
     }
 
@@ -455,10 +366,10 @@ const Admin = {
         <div style="width:44px;height:44px;border-radius:var(--radius-sm);
                     background:var(--surface-2);display:flex;align-items:center;
                     justify-content:center;font-size:20px;flex-shrink:0;">
-          ${e.activo ? '👤' : '🚫'}
+          👤
         </div>
         <div class="registro-info">
-          <div class="registro-tipo" style="${!e.activo ? 'opacity:0.5' : ''}">${e.nombre}</div>
+          <div class="registro-tipo">${e.nombre}</div>
           <div class="registro-fecha">${e.id} · Alta: ${formatFechaLegible(e.fechaAlta)}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
@@ -467,7 +378,7 @@ const Admin = {
           </span>
           <div style="display:flex;gap:6px;">
             <button class="btn btn-ghost btn-sm"
-                    onclick="Admin.abrirModalEditarEmpleado('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${(e.email || '').replace(/'/g, "\\'")}')">
+                    onclick="Admin.abrirModalEditarEmpleado('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${e.email || ''}')">
               ✏️
             </button>
             <button class="btn btn-ghost btn-sm"
@@ -480,11 +391,13 @@ const Admin = {
     `).join('');
   },
 
+  // FIX A4: reemplazar confirm() nativo por modal propio
   async toggleEmpleado(idEmpleado, estadoActual) {
-    const accion   = estadoActual ? 'desactivar' : 'activar';
-    const empleado = AdminState.empleados.find(e => e.id === idEmpleado);
-    const nombre   = empleado?.nombre || idEmpleado;
+    const accion    = estadoActual ? 'desactivar' : 'activar';
+    const empleado  = AdminState.empleados.find(e => e.id === idEmpleado);
+    const nombre    = empleado?.nombre || idEmpleado;
 
+    // Usar modal de confirmación propio
     const confirmado = await this._confirmar(
       `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} empleado?`,
       `${nombre} ${estadoActual ? 'no podrá fichar hasta que lo reactives.' : 'podrá volver a fichar.'}`,
@@ -501,7 +414,7 @@ const Admin = {
       });
 
       if (resp.ok) {
-        toast(`Empleado ${resp.data.activo ? 'activado ✅' : 'desactivado 🚫'} correctamente`, 'success');
+        toast(`Empleado ${resp.data.activo ? 'activado' : 'desactivado'} correctamente`, 'success');
         this.cargarEmpleados();
       } else {
         toast(resp.error || 'Error al cambiar estado', 'error');
@@ -511,7 +424,7 @@ const Admin = {
     }
   },
 
-  // Modal de confirmación propio
+  // Helper: modal de confirmación propio (reemplaza window.confirm)
   _confirmar(titulo, mensaje, labelOk = 'Confirmar', clsOk = 'btn-primary') {
     return new Promise(resolve => {
       document.getElementById('confirmModalTitulo').textContent  = titulo;
@@ -525,7 +438,7 @@ const Admin = {
 
       const cleanup = result => {
         backdrop.classList.remove('show');
-        btnOk.onclick = null;
+        btnOk.onclick    = null;
         document.getElementById('confirmModalCancel').onclick = null;
         resolve(result);
       };
@@ -535,47 +448,48 @@ const Admin = {
     });
   },
 
-  // ── MODAL NUEVO / EDITAR EMPLEADO ─────────────────────────
-
+  // ── MODAL NUEVO EMPLEADO ───────────────────────────────────
   abrirModalNuevoEmpleado() {
-    document.getElementById('modalEmpTitulo').textContent    = '➕ Nuevo Empleado';
-    document.getElementById('nuevoNombre').value             = '';
-    document.getElementById('nuevoPin').value                = '';
-    document.getElementById('nuevoEmail').value              = '';
-    document.getElementById('nuevoEmpError').style.display   = 'none';
-    document.getElementById('nuevoEmpId').value              = '';
-    document.getElementById('nuevoEmpBtn').textContent       = 'Crear empleado';
-    document.getElementById('nuevoPinHint').textContent      = 'Exactamente 4 dígitos. Lo entregarás al empleado.';
-    document.getElementById('pinVisualWrapper').style.display = 'none';
+    document.getElementById('modalEmpTitulo').textContent = '➕ Nuevo Empleado';
+    document.getElementById('nuevoNombre').value  = '';
+    document.getElementById('nuevoPin').value     = '';
+    document.getElementById('nuevoEmail').value   = '';
+    document.getElementById('nuevoEmpError').style.display = 'none';
+    document.getElementById('nuevoEmpId').value   = '';      // sin ID = modo crear
+    document.getElementById('nuevoEmpBtn').textContent = 'Crear empleado';
     document.getElementById('modalNuevoEmp').classList.add('show');
     setTimeout(() => document.getElementById('nuevoNombre').focus(), 350);
   },
 
+  // FIX B4: edición de empleado
   abrirModalEditarEmpleado(id, nombre, email) {
-    document.getElementById('modalEmpTitulo').textContent    = '✏️ Editar Empleado';
-    document.getElementById('nuevoNombre').value             = nombre;
-    document.getElementById('nuevoPin').value                = '';
-    document.getElementById('nuevoEmail').value              = email;
-    document.getElementById('nuevoEmpError').style.display   = 'none';
-    document.getElementById('nuevoEmpId').value              = id;
-    document.getElementById('nuevoEmpBtn').textContent       = 'Guardar cambios';
-    document.getElementById('nuevoPinHint').textContent      = 'Deja vacío para no cambiar el PIN actual.';
-    document.getElementById('pinVisualWrapper').style.display = 'none';
+    document.getElementById('modalEmpTitulo').textContent = '✏️ Editar Empleado';
+    document.getElementById('nuevoNombre').value  = nombre;
+    document.getElementById('nuevoPin').value     = '';  // no se muestra el PIN actual por seguridad
+    document.getElementById('nuevoEmail').value   = email;
+    document.getElementById('nuevoEmpError').style.display = 'none';
+    document.getElementById('nuevoEmpId').value   = id;  // ID = modo editar
+    document.getElementById('nuevoEmpBtn').textContent = 'Guardar cambios';
+
+    // Hint en el PIN al editar
+    document.getElementById('nuevoPinHint').textContent = 'Deja vacío para no cambiar el PIN.';
+
     document.getElementById('modalNuevoEmp').classList.add('show');
     setTimeout(() => document.getElementById('nuevoNombre').focus(), 350);
   },
 
   cerrarModal() {
     document.getElementById('modalNuevoEmp').classList.remove('show');
+    document.getElementById('nuevoPinHint').textContent = '';
   },
 
   async crearEmpleado() {
-    const nombre     = document.getElementById('nuevoNombre').value.trim();
-    const pin        = document.getElementById('nuevoPin').value.trim();
-    const email      = document.getElementById('nuevoEmail').value.trim();
-    const id         = document.getElementById('nuevoEmpId').value.trim();
-    const error      = document.getElementById('nuevoEmpError');
-    const btn        = document.getElementById('nuevoEmpBtn');
+    const nombre = document.getElementById('nuevoNombre').value.trim();
+    const pin    = document.getElementById('nuevoPin').value.trim();
+    const email  = document.getElementById('nuevoEmail').value.trim();
+    const id     = document.getElementById('nuevoEmpId').value.trim();
+    const error  = document.getElementById('nuevoEmpError');
+    const btn    = document.getElementById('nuevoEmpBtn');
     const modoEditar = !!id;
 
     if (!nombre) {
@@ -584,14 +498,16 @@ const Admin = {
       return;
     }
 
+    // En modo crear el PIN es obligatorio; en editar es opcional
     if (!modoEditar && (!pin || !/^\d{4}$/.test(pin))) {
       error.textContent = 'El PIN debe ser exactamente 4 dígitos numéricos.';
       error.style.display = 'block';
       return;
     }
 
+    // En modo editar, si se escribe algo en PIN, debe ser válido
     if (modoEditar && pin && !/^\d{4}$/.test(pin)) {
-      error.textContent = 'El nuevo PIN debe ser exactamente 4 dígitos (o déjalo vacío).';
+      error.textContent = 'El nuevo PIN debe ser exactamente 4 dígitos numéricos (o déjalo vacío).';
       error.style.display = 'block';
       return;
     }
@@ -607,7 +523,7 @@ const Admin = {
         nombre,
         email
       };
-      if (pin)        body.pin        = pin;
+      if (pin)       body.pin       = pin;
       if (modoEditar) body.idEmpleado = id;
 
       const resp = await apiPost(body);
@@ -619,13 +535,14 @@ const Admin = {
       }
 
       if (modoEditar) {
-        toast(`✅ "${nombre}" actualizado${pin ? ' · PIN cambiado' : ''}`, 'success', 5000);
-        this.cerrarModal();
+        // FIX B3: confirmar qué se guardó
+        toast(`✅ Empleado actualizado${pin ? ' (PIN cambiado)' : ''}`, 'success', 5000);
       } else {
-        // Mostrar PIN visualmente antes de cerrar (sin cerrarlo automáticamente)
-        this._mostrarPinCreado(nombre, resp.data.id, pin);
+        // FIX B3: mostrar PIN asignado en el toast
+        toast(`✅ "${nombre}" creado · ID: ${resp.data.id} · PIN: ${pin}`, 'success', 7000);
       }
 
+      this.cerrarModal();
       this.cargarEmpleados();
 
     } catch (err) {
@@ -635,23 +552,6 @@ const Admin = {
       btn.disabled    = false;
       btn.textContent = modoEditar ? 'Guardar cambios' : 'Crear empleado';
     }
-  },
-
-  // Muestra el PIN del nuevo empleado en el modal para que el admin lo anote
-  _mostrarPinCreado(nombre, empId, pin) {
-    document.getElementById('pinVisualWrapper').style.display = '';
-    document.getElementById('pinVisualNombre').textContent    = nombre;
-    document.getElementById('pinVisualId').textContent        = empId;
-    document.getElementById('pinVisualPin').textContent       = pin;
-    // Deshabilitar el botón crear hasta que se cierre con "Entendido"
-    document.getElementById('nuevoEmpBtn').style.display = 'none';
-  },
-
-  confirmarPinVisto() {
-    document.getElementById('pinVisualWrapper').style.display = 'none';
-    document.getElementById('nuevoEmpBtn').style.display = '';
-    this.cerrarModal();
-    toast('✅ Empleado creado. ¡Recuerda entregarle su PIN!', 'success', 6000);
   },
 
   // ── EXPORTAR CSV ───────────────────────────────────────────
@@ -670,10 +570,11 @@ const Admin = {
       r.tipo,
       r.fecha,
       r.hora,
-      r.timestampServidor || '',
+      r.timestampServidor,
       `"${r.observaciones || ''}"`
     ]);
 
+    // FIX M3: UTF-8 con BOM explícito compatible con Excel Mac/Windows
     const csv  = [cabecera, ...filas].map(f => f.join(',')).join('\r\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
@@ -693,21 +594,18 @@ const Admin = {
 // ── INICIALIZACIÓN ───────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
-  // Login admin con Enter
   document.getElementById('adminPinInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') Admin.login();
   });
 
-  // Setup con Enter en campo pin
-  document.getElementById('setupPin')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') Setup.crear();
-  });
-
-  // Guardar empleado con Enter
   document.getElementById('nuevoPin').addEventListener('keydown', e => {
     if (e.key === 'Enter') Admin.crearEmpleado();
   });
 
-  // Arrancar: comprobar si existe admin
-  checkSetup();
+  // FIX C1: auto-login seguro — limpiar antes si falla
+  const pinGuardado = sessionStorage.getItem('admin_pin');
+  if (pinGuardado) {
+    document.getElementById('adminPinInput').value = pinGuardado;
+    Admin.login();
+  }
 });

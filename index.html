@@ -2,39 +2,73 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- viewport: evita el zoom automático de Safari; viewport-fit=cover para Dynamic Island -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+
+  <!-- Theme color (barra de estado del SO) -->
+  <meta name="theme-color" content="#09090f" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#09090f">
+
+  <!-- SEO mínimo -->
+  <meta name="description" content="Control de fichaje laboral para empleados">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Fichaje — Mi Empresa</title>
+
+  <!-- PWA: instalación en iOS Safari -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="Control de fichaje laboral">
-  <title>Fichaje — Mi Empresa</title>
+  <meta name="apple-mobile-web-app-title" content="Fichaje">
+
+  <!-- PWA: iconos para iOS (apple-touch-icon) -->
+  <link rel="apple-touch-icon" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Splash screens iOS — básicos (idealmente genera uno por resolución) -->
+  <!-- Se pueden añadir más breakpoints para cada modelo de iPhone -->
+
+  <!-- PWA manifest (Android + Chrome) -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Favicon estándar -->
+  <link rel="icon" type="image/png" href="icons/icon-96.png">
+
+  <!-- Fuente + CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="styles.css">
+
+  <!-- Precarga app.js -->
+  <link rel="preload" href="app.js" as="script">
 </head>
 <body>
 
 <div class="app-container">
 
-  <!-- ── HEADER ──────────────────────────────────────────── -->
+  <!-- ── HEADER ────────────────────────────────────────────── -->
   <header class="app-header" id="mainHeader">
     <div class="app-logo">
-      <div class="app-logo-icon">⏱</div>
+      <div class="app-logo-icon" role="img" aria-label="Fichaje">⏱</div>
       <span class="app-logo-text" id="empresaNombre">Fichaje</span>
     </div>
-    <button class="header-action" id="logoutBtn" style="display:none" onclick="App.logout()">
+    <button class="header-action" id="logoutBtn" style="display:none"
+            onclick="App.logout()" aria-label="Cerrar sesión">
       Salir
     </button>
   </header>
 
   <!-- ═══════════════════════════════════════════════════════
-       PÁGINA 1: LOGIN (PIN)
+       PÁGINA 1: LOGIN
   ════════════════════════════════════════════════════════════ -->
-  <div class="page active" id="page-login">
+  <div class="page active" id="page-login" role="main">
     <div style="flex:1; display:flex; flex-direction:column; align-items:center;
-                justify-content:center; padding: 32px 24px;">
+                justify-content:center; padding:32px 24px;">
 
-      <div style="font-size:56px; margin-bottom:16px;">👤</div>
-      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Identifícate</h1>
-      <p class="text-muted text-sm" style="margin-bottom:32px; text-align:center">
+      <div style="font-size:60px; margin-bottom:20px; line-height:1;" aria-hidden="true">👤</div>
+      <h1 style="font-size:24px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+        Identifícate
+      </h1>
+      <p style="color:var(--text-secondary); font-size:15px; margin-bottom:36px; text-align:center;">
         Introduce tu PIN de 4 dígitos
       </p>
 
@@ -48,19 +82,26 @@
           placeholder="• • • •"
           autocomplete="off"
           autocorrect="off"
+          autocapitalize="off"
           spellcheck="false"
+          aria-label="PIN de empleado"
+          aria-describedby="loginError"
         >
 
-        <p id="loginError" class="text-sm mt-1"
-           style="color:var(--error); text-align:center; display:none; min-height:20px;">
+        <p id="loginError"
+           role="alert"
+           aria-live="polite"
+           style="color:var(--error); font-size:13px; text-align:center;
+                  min-height:20px; margin-top:8px; display:none;">
           PIN incorrecto. Inténtalo de nuevo.
         </p>
 
-        <button class="btn btn-primary btn-full mt-3" id="loginBtn" onclick="App.login()">
+        <button class="btn btn-primary btn-full mt-3" id="loginBtn"
+                onclick="App.login()" style="font-size:17px;">
           Acceder
         </button>
 
-        <p class="text-xs text-muted text-center mt-2">
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:16px;">
           ¿No tienes PIN? Contacta con administración.
         </p>
       </div>
@@ -71,33 +112,38 @@
   <!-- ═══════════════════════════════════════════════════════
        PÁGINA 2: PANEL EMPLEADO
   ════════════════════════════════════════════════════════════ -->
-  <div class="page" id="page-empleado">
+  <div class="page" id="page-empleado" role="main">
 
-    <!-- Estado del empleado -->
+    <!-- Estado actual -->
     <div class="status-display" id="statusDisplay">
-      <div class="status-icon libre" id="statusIcon">
+      <div class="status-icon libre" id="statusIcon" aria-hidden="true">
         <span id="statusEmoji">🟡</span>
       </div>
       <div class="status-nombre" id="statusNombre">...</div>
-      <div class="status-label" id="statusLabel">Cargando estado...</div>
-      <div class="status-hora" id="relojActual"></div>
-      <div id="ultimaAccion" class="text-sm text-muted" style="margin-top:4px;"></div>
+      <div class="status-label" id="statusLabel" style="color:var(--text-secondary);">
+        Cargando estado...
+      </div>
+      <div class="status-hora" id="relojActual" aria-label="Hora actual"></div>
+      <div id="ultimaAccion"
+           style="font-size:13px; color:var(--text-muted); margin-top:6px;"></div>
     </div>
 
-    <!-- Botón de fichaje principal -->
-    <div class="px-3" style="max-width:400px; width:100%; margin:0 auto;">
+    <!-- Botón de fichaje -->
+    <div style="padding:0 var(--s3) var(--s2); max-width:400px; width:100%; margin:0 auto;">
       <button class="btn btn-full" id="fichajeBtn"
-              onclick="App.fichar()" disabled>
-        <span class="loader" id="fichajeLoader" style="display:none;"></span>
+              onclick="App.fichar()" disabled
+              aria-live="polite">
+        <span class="loader" id="fichajeLoader" style="display:none;" aria-hidden="true"></span>
         <span id="fichajeBtnText">Cargando...</span>
       </button>
-      <p class="text-xs text-muted text-center mt-1" id="fichajeSubtexto"></p>
+      <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:8px;"
+         id="fichajeSubtexto"></p>
     </div>
 
-    <div class="divider mt-3"></div>
+    <div class="divider"></div>
 
     <!-- Historial -->
-    <div class="list-section" style="flex:1; overflow-y:auto;">
+    <div class="list-section" style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;">
       <div class="section-title">Registros recientes</div>
       <div id="historialLista">
         <div class="loading-overlay">
@@ -111,17 +157,23 @@
 
 </div>
 
-<!-- ── SPLASH DE CONFIRMACIÓN ───────────────────────────────── -->
-<div class="confirm-splash" id="confirmSplash" onclick="App.cerrarConfirm()">
-  <div class="confirm-icon" id="confirmIcon">✅</div>
+<!-- ── SPLASH DE CONFIRMACIÓN ─────────────────────────────── -->
+<div class="confirm-splash" id="confirmSplash"
+     onclick="App.cerrarConfirm()"
+     role="dialog"
+     aria-modal="true"
+     aria-label="Fichaje registrado">
+  <div class="confirm-icon" id="confirmIcon" aria-hidden="true">✅</div>
   <div class="confirm-tipo" id="confirmTipo"></div>
-  <div class="confirm-hora" id="confirmHora"></div>
+  <div class="confirm-hora" id="confirmHora" aria-label="Hora del fichaje"></div>
   <div class="confirm-nombre" id="confirmNombre"></div>
-  <p class="text-sm text-muted" style="margin-top:8px;">Toca para continuar</p>
+  <p style="font-size:14px; color:var(--text-muted); margin-top:8px;">
+    Toca para continuar
+  </p>
 </div>
 
-<!-- ── TOAST ─────────────────────────────────────────────────── -->
-<div id="toast"></div>
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
 </body>
