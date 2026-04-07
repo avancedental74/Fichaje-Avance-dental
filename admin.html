@@ -291,7 +291,7 @@
           </div>
         </div>
         <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:10px;">
-          Se actualiza automáticamente cada 60 s
+          Se actualiza automáticamente cada 15 s
         </p>
       </div>
     </div>
@@ -457,67 +457,8 @@
     });
   }
 
-  // ── OBSERVADOR: inyectar columna Estado en filas de la tabla ──
-  // admin.js rellena #tablaBody dinámicamente; observamos los cambios
-  // y añadimos la celda de estado a cada fila de entrada.
-  document.addEventListener('DOMContentLoaded', () => {
-    const tbody = document.getElementById('tablaBody');
-    if (!tbody) return;
-
-    const injectEstado = () => {
-      tbody.querySelectorAll('tr[data-estado-injected]').forEach(tr => {
-        // ya procesada, ignorar
-      });
-
-      tbody.querySelectorAll('tr:not([data-estado-injected])').forEach(tr => {
-        tr.setAttribute('data-estado-injected', '1');
-        const cells = tr.querySelectorAll('td');
-        if (cells.length < 2) return; // fila de carga/vacío
-
-        // Detectar si la fila corresponde a una ENTRADA sin cierre posterior
-        // Señales: columna tipo contiene "Entrada" o badge entrada, y
-        // el dato data-abierto="true" si admin.js lo expone, o bien
-        // simplemente inyectamos la celda y la llenamos según lo que veamos.
-        const tipoCell = cells[1]; // columna Tipo (índice 1)
-        const tipoText = tipoCell ? tipoCell.textContent.trim().toLowerCase() : '';
-
-        // Comprobamos si la fila tiene el atributo data-abierto puesto por admin.js
-        const esAbierto = tr.dataset.abierto === 'true' ||
-                          tr.dataset.jornada === 'activa' ||
-                          tr.classList.contains('jornada-activa');
-
-        // Si el tipo es "entrada" marcamos como potencialmente activa
-        // (admin.js debería poner data-abierto; si no podemos inferirlo)
-        const esEntrada = tipoText.includes('entrada') || tipoText.includes('🟢');
-
-        const td = document.createElement('td');
-
-        if (esAbierto || (esEntrada && tr.dataset.abierto !== 'false')) {
-          // Solo marcar como activa si admin.js indica explícitamente abierto=true
-          if (esAbierto) {
-            tr.classList.add('jornada-activa');
-            td.innerHTML = '<span class="badge-activa">🟢 En jornada</span>';
-          } else {
-            td.innerHTML = '<span class="badge-cerrado">— </span>';
-          }
-        } else {
-          td.innerHTML = '<span class="badge-cerrado">—</span>';
-        }
-
-        // Insertar después de la columna Tipo (posición 2)
-        if (cells[2]) {
-          tr.insertBefore(td, cells[2]);
-        } else {
-          tr.appendChild(td);
-        }
-      });
-    };
-
-    const observer = new MutationObserver(injectEstado);
-    observer.observe(tbody, { childList: true, subtree: true });
-    // Intentar también al cargar por si ya hay filas
-    injectEstado();
-  });
+  // La columna Estado se rellena directamente en admin.js → renderTabla().
+  // No se necesita ningún observador externo.
   // Inyectamos exportarXLSX en el objeto Admin una vez que el DOM y admin.js están listos
   document.addEventListener('DOMContentLoaded', () => {
     // Esperamos a que Admin esté disponible (admin.js puede declararlo de forma diferida)
