@@ -171,7 +171,7 @@
   <!-- ═══════════════════════════════════════════════════════
        PÁGINA 2: DASHBOARD ADMIN
   ════════════════════════════════════════════════════════════ -->
-  <div class="page" id="page-admin-dashboard">
+  <div class="page admin-desktop-layout" id="page-admin-dashboard">
 
     <!-- TABS sticky debajo del header -->
     <nav class="tabs" role="tablist" aria-label="Secciones del panel">
@@ -233,6 +233,10 @@
                 title="Exportar CSV" aria-label="Descargar CSV">
           ⬇ CSV
         </button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarXLSX()"
+                title="Exportar Excel" aria-label="Descargar Excel XLSX" id="btnXlsx">
+          📊 Excel
+        </button>
       </div>
 
       <!-- Tabla -->
@@ -244,6 +248,7 @@
               <tr>
                 <th data-col="nombre"  onclick="Admin.sortTabla('nombre')"  class="sortable">Empleado ↕</th>
                 <th data-col="tipo"    onclick="Admin.sortTabla('tipo')"    class="sortable">Tipo ↕</th>
+                <th data-col="estado">Estado</th>
                 <th data-col="fecha"   onclick="Admin.sortTabla('fecha')"   class="sortable">Fecha ↕</th>
                 <th data-col="hora"    onclick="Admin.sortTabla('hora')"    class="sortable">Hora ↕</th>
                 <th data-col="idRegistro">ID</th>
@@ -428,6 +433,7 @@
 <!-- ── TOAST ───────────────────────────────────────────────── -->
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="admin.js?v=2.3"></script>
 <script>
   // ── PWA INSTALL ─────────────────────────────────────────────
@@ -451,12 +457,152 @@
     });
   }
 
+  // ── OBSERVADOR: inyectar columna Estado en filas de la tabla ──
+  // admin.js rellena #tablaBody dinámicamente; observamos los cambios
+  // y añadimos la celda de estado a cada fila de entrada.
+  document.addEventListener('DOMContentLoaded', () => {
+    const tbody = document.getElementById('tablaBody');
+    if (!tbody) return;
+
+    const injectEstado = () => {
+      tbody.querySelectorAll('tr[data-estado-injected]').forEach(tr => {
+        // ya procesada, ignorar
+      });
+
+      tbody.querySelectorAll('tr:not([data-estado-injected])').forEach(tr => {
+        tr.setAttribute('data-estado-injected', '1');
+        const cells = tr.querySelectorAll('td');
+        if (cells.length < 2) return; // fila de carga/vacío
+
+        // Detectar si la fila corresponde a una ENTRADA sin cierre posterior
+        // Señales: columna tipo contiene "Entrada" o badge entrada, y
+        // el dato data-abierto="true" si admin.js lo expone, o bien
+        // simplemente inyectamos la celda y la llenamos según lo que veamos.
+        const tipoCell = cells[1]; // columna Tipo (índice 1)
+        const tipoText = tipoCell ? tipoCell.textContent.trim().toLowerCase() : '';
+
+        // Comprobamos si la fila tiene el atributo data-abierto puesto por admin.js
+        const esAbierto = tr.dataset.abierto === 'true' ||
+                          tr.dataset.jornada === 'activa' ||
+                          tr.classList.contains('jornada-activa');
+
+        // Si el tipo es "entrada" marcamos como potencialmente activa
+        // (admin.js debería poner data-abierto; si no podemos inferirlo)
+        const esEntrada = tipoText.includes('entrada') || tipoText.includes('🟢');
+
+        const td = document.createElement('td');
+
+        if (esAbierto || (esEntrada && tr.dataset.abierto !== 'false')) {
+          // Solo marcar como activa si admin.js indica explícitamente abierto=true
+          if (esAbierto) {
+            tr.classList.add('jornada-activa');
+            td.innerHTML = '<span class="badge-activa">🟢 En jornada</span>';
+          } else {
+            td.innerHTML = '<span class="badge-cerrado">— </span>';
+          }
+        } else {
+          td.innerHTML = '<span class="badge-cerrado">—</span>';
+        }
+
+        // Insertar después de la columna Tipo (posición 2)
+        if (cells[2]) {
+          tr.insertBefore(td, cells[2]);
+        } else {
+          tr.appendChild(td);
+        }
+      });
+    };
+
+    const observer = new MutationObserver(injectEstado);
+    observer.observe(tbody, { childList: true, subtree: true });
+    // Intentar también al cargar por si ya hay filas
+    injectEstado();
+  });
+  // Inyectamos exportarXLSX en el objeto Admin una vez que el DOM y admin.js están listos
+  document.addEventListener('DOMContentLoaded', () => {
+    // Esperamos a que Admin esté disponible (admin.js puede declararlo de forma diferida)
+    const injectXLSX = () => {
+      if (typeof Admin === 'undefined') { setTimeout(injectXLSX, 200); return; }
+
+      Admin.exportarXLSX = function() {
+        // Recoger los datos de la tabla visible
+        const tabla = document.getElementById('tablaRegistros');
+        if (!tabla) return;
+
+        const filtroEmpleado = document.getElementById('filtroEmpleado');
+        const filtroFecha    = document.getElementById('filtroFecha');
+        const empleadoSel    = filtroEmpleado ? filtroEmpleado.options[filtroEmpleado.selectedIndex]?.text : 'Todos';
+        const fechaSel       = filtroFecha ? (filtroFecha.value || 'Todas') : 'Todas';
+
+        // Construir array de datos desde la tabla DOM
+        const rows = [];
+        const headers = [];
+        tabla.querySelectorAll('thead th').forEach(th => {
+          // Limpiar el texto de los indicadores de orden (▲▼ y ↕)
+          headers.push(th.textContent.replace(/[↕▲▼]/g, '').trim());
+        });
+        rows.push(headers);
+
+        tabla.querySelectorAll('tbody tr').forEach(tr => {
+          const cells = tr.querySelectorAll('td');
+          if (cells.length === 0) return; // skip loading/empty rows
+          const row = [];
+          cells.forEach(td => row.push(td.textContent.trim()));
+          rows.push(row);
+        });
+
+        if (rows.length <= 1) {
+          if (typeof Admin.toast === 'function') Admin.toast('No hay datos para exportar', 'error');
+          return;
+        }
+
+        // Crear workbook con SheetJS
+        const wb  = XLSX.utils.book_new();
+        const ws  = XLSX.utils.aoa_to_sheet(rows);
+
+        // Ancho de columnas automático
+        const colWidths = headers.map((h, i) => {
+          const maxLen = rows.reduce((m, r) => Math.max(m, (r[i] || '').toString().length), h.length);
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+        });
+        ws['!cols'] = colWidths;
+
+        // Metadatos en una hoja aparte
+        const meta = [
+          ['Panel Admin — Fichaje Laboral'],
+          ['Exportado el', new Date().toLocaleString('es-ES')],
+          ['Filtro empleado', empleadoSel],
+          ['Filtro fecha', fechaSel],
+          ['Total registros', rows.length - 1],
+        ];
+        const wsMeta = XLSX.utils.aoa_to_sheet(meta);
+        wsMeta['!cols'] = [{ wch: 20 }, { wch: 30 }];
+
+        XLSX.utils.book_append_sheet(wb, ws,     'Registros');
+        XLSX.utils.book_append_sheet(wb, wsMeta, 'Info');
+
+        const fecha = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `fichajes_${fecha}.xlsx`);
+      };
+    };
+    injectXLSX();
+  });
+
   // ── SERVICE WORKER ───────────────────────────────────────────
+  // Requiere que service-worker.js esté desplegado junto a este HTML.
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('service-worker.js')
-        .then(reg => console.log('Service Worker Registrado!', reg))
-        .catch(err => console.error('Error registrando Service Worker', err));
+        .then(reg => console.log('Service Worker registrado', reg.scope))
+        .catch(err => {
+          // El archivo service-worker.js no existe todavía en el servidor.
+          // La app sigue funcionando; solo se desactiva el soporte offline.
+          if (err.name === 'TypeError' || (err instanceof TypeError)) {
+            console.warn('Service Worker: archivo no encontrado. Despliega service-worker.js para soporte offline.');
+          } else {
+            console.warn('Service Worker no pudo registrarse:', err.message);
+          }
+        });
     });
   }
 </script>

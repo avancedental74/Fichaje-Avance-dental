@@ -925,6 +925,43 @@ tbody td {
   }
 }
 
+/* ── FILA EN JORNADA ACTIVA ─────────────────────────────────── */
+tbody tr.jornada-activa {
+  background: rgba(0, 214, 143, 0.04);
+  border-left: 3px solid var(--entrada);
+}
+
+tbody tr.jornada-activa td:first-child {
+  padding-left: 11px; /* compensar el border-left de 3px */
+}
+
+.badge-activa {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--entrada-dim);
+  color: var(--entrada);
+  white-space: nowrap;
+  animation: pulseGreen 2.5s ease-in-out infinite;
+}
+
+.badge-cerrado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 /* ── SETUP PAGE ──────────────────────────────────────────────── */
 #page-setup .setup-warning {
   background: var(--warning-dim);
@@ -945,12 +982,141 @@ tbody td {
 
 /* ── TABLET / DESKTOP ────────────────────────────────────────── */
 @media (min-width: 600px) {
-  .app-container {
+  /* Solo limitamos el ancho en páginas de empleado/login, NO en el dashboard admin */
+  body:not(.admin-mode) .app-container,
+  #page-admin-login .app-container,
+  #page-setup .app-container {
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  /* El contenedor principal en modo admin no tiene restricción de ancho */
+}
+
+/* Cuando la página de login/setup está activa, centramos el contenedor */
+@media (min-width: 600px) {
+  .app-container:has(#page-admin-login.active),
+  .app-container:has(#page-setup.active) {
     max-width: 480px;
     margin: 0 auto;
     min-height: 100dvh;
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
+  }
+}
+
+/* ── ADMIN DESKTOP — Layout amplio ────────────────────────────── */
+@media (min-width: 900px) {
+
+  /* El header admin ocupa todo el ancho */
+  #adminHeader {
+    max-width: 100%;
+  }
+
+  .admin-desktop-layout {
+    width: 100%;
+    max-width: 1400px !important;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+
+  .admin-desktop-layout .tabs {
+    position: sticky;
+    top: 56px;
+    z-index: var(--z-tabs);
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* Tab registros — layout completo en una columna, tabla grande */
+  #tab-registros {
+    display: flex !important;
+    flex-direction: column;
+    padding: var(--s3);
+    gap: var(--s3);
+  }
+
+  #tab-registros .stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+    padding: 0;
+    gap: 16px;
+  }
+
+  #tab-registros .filtros {
+    padding: 0;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+
+  #tab-registros .filtros .input-field {
+    min-width: 160px;
+    flex: 1;
+  }
+
+  #tab-registros > div:last-of-type {
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  #tab-registros .table-wrapper {
+    max-height: calc(100vh - 320px);
+    overflow-y: auto;
+  }
+
+  /* Tab abiertos y empleados — grid de tarjetas */
+  #tab-abiertos > div,
+  #tab-empleados > div {
+    padding: var(--s3);
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .admin-desktop-layout #listaEmpleados {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--s2);
+    padding: 0;
+  }
+
+  .admin-desktop-layout .registro-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--s2);
+    margin: 0;
+  }
+
+  .admin-desktop-layout #listaAbiertos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--s2);
+    padding: 0;
+  }
+
+  .admin-desktop-layout table {
+    min-width: 100%;
+    font-size: 14px;
+  }
+
+  .admin-desktop-layout thead th {
+    padding: 14px 16px;
+  }
+
+  .admin-desktop-layout tbody td {
+    padding: 14px 16px;
+  }
+
+  /* Stat cards más grandes en desktop */
+  .admin-desktop-layout .stat-card {
+    padding: 20px 24px;
+  }
+
+  .admin-desktop-layout .stat-number {
+    font-size: 36px;
   }
 }
 
