@@ -172,12 +172,10 @@ const Admin = {
     this.renderEmpleados(empleados);
 
     clearInterval(AdminState.pollingTimer);
-    // FIX BUG 2: reducido de 60 s a 15 s + también refresca la tab de registros
     AdminState.pollingTimer = setInterval(() => {
-      if (AdminState.tabActual === 'abiertos')   this.consultarAbiertos();
-      if (AdminState.tabActual === 'registros')  this.consultarRegistros();
+      if (AdminState.tabActual === 'abiertos') this.consultarAbiertos();
       this.actualizarStatAbiertos();
-    }, 15000);
+    }, 60000);
   },
 
   // ── TABS ───────────────────────────────────────────────────
@@ -250,6 +248,22 @@ const Admin = {
       th.classList.toggle('sorted-desc', AdminState.sortCol === col && AdminState.sortDir === 'desc');
     });
 
+    // Detectar qué empleados tienen jornada abierta en el conjunto de registros:
+    // un empleado está "abierto" si su último registro del día es ENTRADA (sin SALIDA posterior).
+    const ultimoPorEmpleado = {};
+    registros.forEach(r => {
+      const key = r.idEmpleado + '_' + r.fecha;
+      if (!ultimoPorEmpleado[key] || r.hora > ultimoPorEmpleado[key].hora) {
+        ultimoPorEmpleado[key] = r;
+      }
+    });
+    // Set de idRegistro cuyo empleado+fecha tiene la ENTRADA como último registro
+    const abiertosIds = new Set(
+      Object.values(ultimoPorEmpleado)
+        .filter(r => r.tipo === 'ENTRADA')
+        .map(r => r.idRegistro)
+    );
+
     let sorted = [...registros];
     if (AdminState.sortCol) {
       sorted.sort((a, b) => {
@@ -261,19 +275,26 @@ const Admin = {
       });
     }
 
-    tbody.innerHTML = sorted.map(r => `
-      <tr>
-        <td><strong>${r.nombre}</strong><br><span class="text-xs text-muted">${r.idEmpleado}</span></td>
-        <td>
-          <span class="badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}">
-            ${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}
-          </span>
-        </td>
-        <td>${formatFechaLegible(r.fecha)}</td>
-        <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
-        <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0, 8)}…</td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = sorted.map(r => {
+      const esAbierto = abiertosIds.has(r.idRegistro);
+      const estadoCelda = esAbierto
+        ? '<span class="badge-activa">🟢 En jornada</span>'
+        : '<span class="badge-cerrado">—</span>';
+      const trClass = esAbierto ? ' class="jornada-activa"' : '';
+      return `
+        <tr${trClass}>
+          <td><strong>${r.nombre}</strong><br><span class="text-xs text-muted">${r.idEmpleado}</span></td>
+          <td>
+            <span class="badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}">
+              ${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}
+            </span>
+          </td>
+          <td>${estadoCelda}</td>
+          <td>${formatFechaLegible(r.fecha)}</td>
+          <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
+          <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0, 8)}…</td>
+        </tr>`;
+    }).join('');
   },
 
   sortTabla(col) {
