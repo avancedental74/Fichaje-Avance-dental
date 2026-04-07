@@ -119,7 +119,7 @@ const Admin = {
       if (!resp.ok) {
         // FIX C1: limpiar sessionStorage si el PIN guardado es incorrecto
         sessionStorage.removeItem('admin_pin');
-        error.textContent   = 'PIN de administrador incorrecto.';
+        error.textContent   = 'Error: ' + (resp.error ? resp.error : 'PIN de administrador incorrecto.');
         error.style.display = 'block';
         pinInput.value      = '';
         pinInput.focus();

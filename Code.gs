@@ -19,10 +19,7 @@ const CONFIG = {
 // ── CORS HEADERS ─────────────────────────────────────────────
 function setCORSHeaders(output) {
   return output
-    .setMimeType(ContentService.MimeType.JSON)
-    .addHeader('Access-Control-Allow-Origin', '*')
-    .addHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-    .addHeader('Access-Control-Allow-Headers', 'Content-Type');
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ── RESPUESTAS ESTÁNDAR ───────────────────────────────────────
