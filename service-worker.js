@@ -11,8 +11,8 @@ const STATIC_ASSETS = [
   '/app.js',
   '/admin.js',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icon-192.png',
+  '/icon-512.png',
   'https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap'
 ];
 

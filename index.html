@@ -20,9 +20,8 @@
   <meta name="apple-mobile-web-app-title" content="Fichaje">
 
   <!-- PWA: iconos para iOS (apple-touch-icon) -->
-  <link rel="apple-touch-icon" href="icons/icon-152.png">
-  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
 
   <!-- Splash screens iOS — básicos (idealmente genera uno por resolución) -->
   <!-- Se pueden añadir más breakpoints para cada modelo de iPhone -->
@@ -31,7 +30,7 @@
   <link rel="manifest" href="manifest.json">
 
   <!-- Favicon estándar -->
-  <link rel="icon" type="image/png" href="icons/icon-96.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
 
   <!-- Fuente + CSS -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -176,5 +175,14 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(reg => console.log('Service Worker Registrado!', reg))
+        .catch(err => console.error('Error registrando Service Worker', err));
+    });
+  }
+</script>
 </body>
 </html>
