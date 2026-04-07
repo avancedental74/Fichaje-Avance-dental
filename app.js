@@ -293,11 +293,23 @@ const App = {
         return;
       }
 
+      // ACTUALIZAR ESTADO INMEDIATAMENTE con la respuesta
+      const tipo = resp.data.tipo;
+      const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'JORNADA_CERRADA';
+      this.renderEstado({
+        estado: nuevoEstado,
+        nombre: State.nombre,
+        ultimaAccion: { tipo, hora: resp.data.hora }
+      });
+
       this.mostrarConfirm(resp.data);
+
+      // Refrescar del servidor después de un delay para confirmar
+      // Delay aumentado a 4 s para dar tiempo a Apps Script a propagar el cambio
       setTimeout(() => {
-        this.refrescarEstado();
+        this.refrescarEstadoConGuardia(nuevoEstado);
         this.cargarHistorial();
-      }, 500);
+      }, 4000);
 
     } catch (err) {
       loader.style.display = 'none';
@@ -313,6 +325,23 @@ const App = {
     try {
       const resp = await apiGet({ accion: 'estado', pin: State.pin });
       if (resp.ok) this.renderEstado(resp.data);
+    } catch (_) {}
+  },
+
+  // FIX BUG 1: Refresco con guardia — si el servidor aún devuelve el estado
+  // anterior (propagación lenta de Apps Script), reintenta en 3 s más en lugar
+  // de sobreescribir la UI con el estado incorrecto.
+  async refrescarEstadoConGuardia(estadoEsperado) {
+    try {
+      const resp = await apiGet({ accion: 'estado', pin: State.pin });
+      if (!resp.ok) return;
+      if (resp.data.estado === estadoEsperado) {
+        // Servidor ya refleja el cambio → actualizar normalmente
+        this.renderEstado(resp.data);
+      } else {
+        // Servidor aún devuelve estado anterior → reintentar en 3 s más
+        setTimeout(() => this.refrescarEstado(), 3000);
+      }
     } catch (_) {}
   },
 
