@@ -3,7 +3,7 @@
 //  Estrategia: Cache First para estáticos, Network First para API
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-v2.1';
+const CACHE_NAME    = 'fichaje-v2.2';
 const STATIC_ASSETS = [
   '/index.html',
   '/admin.html',
