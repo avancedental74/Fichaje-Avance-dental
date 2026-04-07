@@ -61,10 +61,11 @@ function haptic() {
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  url.searchParams.set('t', Date.now()); // CACHE-BUSTER
   const controller = new AbortController();
   const timeout    = setTimeout(() => controller.abort(), 12000);
   try {
-    const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal });
+    const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal, cache: 'no-store' });
     clearTimeout(timeout);
     return res.json();
   } catch (err) {
