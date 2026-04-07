@@ -9,8 +9,6 @@
   <meta name="description" content="Control de fichaje laboral">
   <title>Fichaje — Mi Empresa</title>
   <link rel="stylesheet" href="styles.css">
-  <!-- PWA manifest opcional -->
-  <!-- <link rel="manifest" href="manifest.json"> -->
 </head>
 <body>
 
@@ -34,14 +32,12 @@
     <div style="flex:1; display:flex; flex-direction:column; align-items:center;
                 justify-content:center; padding: 32px 24px;">
 
-      <!-- Ilustración -->
       <div style="font-size:56px; margin-bottom:16px;">👤</div>
       <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Identifícate</h1>
       <p class="text-muted text-sm" style="margin-bottom:32px; text-align:center">
-        Introduce tu PIN de empleado
+        Introduce tu PIN de 4 dígitos
       </p>
 
-      <!-- PIN Input -->
       <div style="width:100%; max-width:320px;">
         <input
           type="password"
@@ -55,13 +51,11 @@
           spellcheck="false"
         >
 
-        <!-- Error -->
         <p id="loginError" class="text-sm mt-1"
            style="color:var(--error); text-align:center; display:none; min-height:20px;">
           PIN incorrecto. Inténtalo de nuevo.
         </p>
 
-        <!-- Botón -->
         <button class="btn btn-primary btn-full mt-3" id="loginBtn" onclick="App.login()">
           Acceder
         </button>

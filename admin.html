@@ -24,7 +24,68 @@
   </header>
 
   <!-- ═══════════════════════════════════════════════════════
-       PÁGINA: LOGIN ADMIN
+       PÁGINA 0: SETUP — PRIMER ADMINISTRADOR
+       Solo se muestra si no existe ningún admin en el sistema
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page" id="page-setup">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;
+                justify-content:center; padding:32px 24px;">
+
+      <div style="font-size:56px; margin-bottom:16px;">⚙️</div>
+      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px;">Configuración inicial</h1>
+      <p class="text-muted text-sm" style="margin-bottom:8px; text-align:center">
+        No existe ningún administrador. Crea el primero para activar el sistema.
+      </p>
+      <p class="text-xs text-muted text-center" style="margin-bottom:28px;">
+        Necesitarás la <strong style="color:var(--warning)">clave de instalación</strong>
+        definida en el backend (BOOTSTRAP_SECRET).
+      </p>
+
+      <div style="width:100%; max-width:360px;">
+
+        <div class="input-group mb-2">
+          <label class="input-label">Clave de instalación</label>
+          <input type="password" class="input-field" id="setupSecret"
+                 placeholder="Clave definida en Code.gs" autocomplete="off">
+        </div>
+
+        <div class="input-group mb-2">
+          <label class="input-label">Tu nombre</label>
+          <input type="text" class="input-field" id="setupNombre"
+                 placeholder="Ej: Carlos García" autocomplete="off">
+        </div>
+
+        <div class="input-group mb-2">
+          <label class="input-label">PIN de administrador (4–6 dígitos)</label>
+          <input type="text" inputmode="numeric" maxlength="6"
+                 class="input-field pin-input" id="setupPin"
+                 placeholder="• • • •" autocomplete="off">
+          <span class="text-xs text-muted">Recuérdalo bien. No hay recuperación automática.</span>
+        </div>
+
+        <div class="input-group mb-3">
+          <label class="input-label">Email (opcional)</label>
+          <input type="email" class="input-field" id="setupEmail"
+                 placeholder="admin@empresa.com" autocomplete="off">
+        </div>
+
+        <p id="setupError" class="text-sm mb-2"
+           style="color:var(--error); text-align:center; display:none;"></p>
+
+        <button class="btn btn-primary btn-full" id="setupBtn" onclick="Setup.crear()">
+          Crear administrador
+        </button>
+
+        <p class="text-xs text-muted text-center mt-2">
+          Este formulario se desactivará automáticamente tras crear el primer administrador.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 1: LOGIN ADMIN
   ════════════════════════════════════════════════════════════ -->
   <div class="page active" id="page-admin-login">
     <div style="flex:1; display:flex; flex-direction:column; align-items:center;
@@ -37,6 +98,9 @@
       </p>
 
       <div style="width:100%; max-width:320px;">
+        <p class="text-xs text-muted text-center" style="margin-bottom:8px;">
+          Introduce tu PIN de administrador
+        </p>
         <input
           type="password"
           inputmode="numeric"
@@ -59,7 +123,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════
-       PÁGINA: DASHBOARD ADMIN
+       PÁGINA 2: DASHBOARD ADMIN
   ════════════════════════════════════════════════════════════ -->
   <div class="page" id="page-admin-dashboard">
 
@@ -73,7 +137,6 @@
     <!-- ── TAB: REGISTROS ──────────────────────────────── -->
     <div id="tab-registros" class="tab-content">
 
-      <!-- Stats rápidas del día -->
       <div class="stats-grid" id="statsGrid">
         <div class="stat-card">
           <div class="stat-number" id="statTotal" style="color:var(--admin)">—</div>
@@ -93,9 +156,9 @@
         </div>
       </div>
 
-      <!-- Filtros -->
       <div class="filtros">
         <input type="date" class="input-field" id="filtroFecha" style="flex:1; min-width:140px;">
+        <button class="btn btn-ghost btn-sm" onclick="Admin.irAHoy()" title="Ver hoy">📅 Hoy</button>
         <select class="input-field" id="filtroEmpleado" style="flex:1; min-width:140px;">
           <option value="">Todos los empleados</option>
         </select>
@@ -103,17 +166,16 @@
         <button class="btn btn-ghost btn-sm" onclick="Admin.exportarCSV()" title="Exportar CSV">⬇ CSV</button>
       </div>
 
-      <!-- Tabla de registros -->
       <div class="p-2" style="overflow-y:auto; flex:1;">
         <div class="table-wrapper">
           <table id="tablaRegistros">
             <thead>
               <tr>
-                <th>Empleado</th>
-                <th>Tipo</th>
-                <th>Fecha</th>
-                <th>Hora</th>
-                <th>ID Registro</th>
+                <th data-col="nombre"     onclick="Admin.sortTabla('nombre')"     class="sortable">Empleado ↕</th>
+                <th data-col="tipo"       onclick="Admin.sortTabla('tipo')"       class="sortable">Tipo ↕</th>
+                <th data-col="fecha"      onclick="Admin.sortTabla('fecha')"      class="sortable">Fecha ↕</th>
+                <th data-col="hora"       onclick="Admin.sortTabla('hora')"       class="sortable">Hora ↕</th>
+                <th data-col="idRegistro">ID Registro</th>
               </tr>
             </thead>
             <tbody id="tablaBody">
@@ -136,13 +198,17 @@
     <!-- ── TAB: EN JORNADA ─────────────────────────────── -->
     <div id="tab-abiertos" class="tab-content" style="display:none;">
       <div class="p-3">
-        <div class="section-title">Empleados con jornada activa ahora</div>
+        <div class="flex justify-between items-center mb-2">
+          <div class="section-title" style="margin-bottom:0">Empleados con jornada activa ahora</div>
+          <button class="btn btn-ghost btn-sm" onclick="Admin.consultarAbiertos()">↻ Actualizar</button>
+        </div>
         <div id="listaAbiertos">
           <div class="loading-overlay">
             <div class="loader"></div>
             <span>Cargando...</span>
           </div>
         </div>
+        <p class="text-xs text-muted text-center mt-2">Se actualiza automáticamente cada 60 segundos</p>
       </div>
     </div>
 
@@ -170,38 +236,88 @@
   </div>
 </div>
 
-<!-- ── MODAL: NUEVO EMPLEADO ───────────────────────────────── -->
+<!-- ── MODAL: CREAR / EDITAR EMPLEADO ───────────────────────── -->
 <div class="modal-backdrop" id="modalNuevoEmp" onclick="Admin.cerrarModal()">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
-    <div class="modal-title">➕ Nuevo Empleado</div>
+    <div class="modal-title" id="modalEmpTitulo">➕ Nuevo Empleado</div>
+
+    <input type="hidden" id="nuevoEmpId">
 
     <div class="input-group mb-2">
       <label class="input-label">Nombre completo</label>
-      <input type="text" class="input-field" id="nuevoNombre" placeholder="Ej: María García López" autocomplete="off">
+      <input type="text" class="input-field" id="nuevoNombre"
+             placeholder="Ej: María García López" autocomplete="off">
     </div>
 
     <div class="input-group mb-2">
       <label class="input-label">PIN (4 dígitos)</label>
-      <input type="text" inputmode="numeric" maxlength="4" class="input-field" id="nuevoPin" placeholder="1234" autocomplete="off">
+      <input type="text" inputmode="numeric" maxlength="4"
+             class="input-field" id="nuevoPin"
+             placeholder="1234" autocomplete="off">
+      <span class="text-xs text-muted" id="nuevoPinHint"></span>
     </div>
 
     <div class="input-group mb-3">
       <label class="input-label">Email (opcional)</label>
-      <input type="email" class="input-field" id="nuevoEmail" placeholder="empleado@empresa.com" autocomplete="off">
+      <input type="email" class="input-field" id="nuevoEmail"
+             placeholder="empleado@empresa.com" autocomplete="off">
     </div>
+
+    <!-- ─── BLOQUE DE PIN CREADO — se muestra tras crear empleado ─── -->
+    <div id="pinVisualWrapper" style="display:none; margin-bottom:16px;">
+      <div style="background:var(--entrada-dim); border:1px solid rgba(0,214,143,0.3);
+                  border-radius:var(--radius); padding:16px; text-align:center;">
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">
+          ✅ Empleado creado:
+          <strong id="pinVisualNombre" style="color:var(--text-primary)"></strong>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">
+          ID: <span id="pinVisualId" style="font-family:monospace;"></span>
+        </div>
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:6px;">
+          PIN para entregar al empleado:
+        </div>
+        <div style="font-size:40px; font-weight:700; letter-spacing:0.3em;
+                    color:var(--entrada); font-variant-numeric:tabular-nums;"
+             id="pinVisualPin"></div>
+        <p class="text-xs text-muted" style="margin-top:8px;">
+          ⚠️ Anótalo ahora. No podrás consultarlo de nuevo.
+        </p>
+        <button class="btn btn-primary btn-sm mt-2" style="width:100%"
+                onclick="Admin.confirmarPinVisto()">
+          ✅ He anotado el PIN — Cerrar
+        </button>
+      </div>
+    </div>
+    <!-- ─────────────────────────────────────────────────────────── -->
 
     <p id="nuevoEmpError" class="text-sm mb-2" style="color:var(--error); display:none;"></p>
 
     <div class="flex gap-2">
       <button class="btn btn-ghost btn-sm flex-1" onclick="Admin.cerrarModal()">Cancelar</button>
-      <button class="btn btn-primary flex-1" id="nuevoEmpBtn" onclick="Admin.crearEmpleado()">Crear empleado</button>
+      <button class="btn btn-primary flex-1" id="nuevoEmpBtn" onclick="Admin.crearEmpleado()">
+        Crear empleado
+      </button>
     </div>
 
   </div>
 </div>
 
-<!-- ── TOAST ─────────────────────────────────────────────────── -->
+<!-- ── MODAL: CONFIRMACIÓN ────────────────────────────────────── -->
+<div class="modal-backdrop" id="modalConfirm">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:380px;">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="confirmModalTitulo">¿Confirmar acción?</div>
+    <p class="text-sm text-muted mb-3" id="confirmModalMensaje"></p>
+    <div class="flex gap-2">
+      <button class="btn btn-ghost btn-sm flex-1" id="confirmModalCancel">Cancelar</button>
+      <button class="btn btn-danger flex-1" id="confirmModalOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ──────────────────────────────────────────────────── -->
 <div id="toast"></div>
 
 <script src="admin.js"></script>

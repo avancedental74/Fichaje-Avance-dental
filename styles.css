@@ -1,6 +1,6 @@
 /* ============================================================
    FICHAJE LABORAL — styles.css
-   Design system mobile-first
+   Design system mobile-first — v2.0
    ============================================================ */
 
 /* ── RESET & BOX MODEL ─────────────────────────────────────── */
@@ -12,19 +12,16 @@
 
 /* ── VARIABLES ──────────────────────────────────────────────── */
 :root {
-  /* Colores base */
   --bg:          #09090f;
   --surface:     #12121e;
   --surface-2:   #1a1a2e;
   --border:      rgba(255,255,255,0.07);
   --border-hover:rgba(255,255,255,0.16);
 
-  /* Texto */
   --text-primary:   #f0f0f8;
   --text-secondary: #8888a8;
   --text-muted:     #55556a;
 
-  /* Semánticos */
   --entrada:        #00d68f;
   --entrada-dim:    rgba(0, 214, 143, 0.12);
   --salida:         #ff7043;
@@ -36,7 +33,6 @@
   --error:          #ef5350;
   --error-dim:      rgba(239, 83, 80, 0.12);
 
-  /* Espaciado (múltiplos de 8) */
   --s1: 8px;
   --s2: 16px;
   --s3: 24px;
@@ -44,18 +40,15 @@
   --s5: 40px;
   --s6: 48px;
 
-  /* Radio */
   --radius-sm: 8px;
   --radius:    14px;
   --radius-lg: 20px;
   --radius-pill: 999px;
 
-  /* Sombras */
   --shadow-sm:  0 2px 8px rgba(0,0,0,0.3);
   --shadow:     0 8px 24px rgba(0,0,0,0.4);
   --shadow-lg:  0 16px 48px rgba(0,0,0,0.5);
 
-  /* Transiciones */
   --t-fast:   0.15s ease;
   --t-normal: 0.25s ease;
   --t-slow:   0.4s ease;
@@ -293,7 +286,7 @@ body {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: 16px; /* evita zoom iOS */
+  font-size: 16px;
   padding: 14px 16px;
   width: 100%;
   transition: border-color var(--t-fast), box-shadow var(--t-fast);
@@ -362,124 +355,42 @@ body {
   50%       { box-shadow: 0 0 0 12px rgba(0, 214, 143, 0); }
 }
 
-.status-nombre {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.status-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.status-hora {
-  font-size: 28px;
-  font-weight: 300;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  margin: var(--s2) 0;
-}
-
-/* ── HISTORIAL / LISTAS ─────────────────────────────────────── */
-.list-section {
-  padding: var(--s2) var(--s3);
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  margin-bottom: var(--s2);
-}
-
+/* ── REGISTRO ITEMS ─────────────────────────────────────────── */
 .registro-item {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: var(--s2);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  margin-bottom: var(--s1);
-  animation: slideUp 0.35s ease both;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--border);
+  animation: fadeIn 0.4s ease both;
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+.registro-item:last-child {
+  border-bottom: none;
 }
 
 .registro-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 
-.registro-icon.entrada { background: var(--entrada-dim); }
-.registro-icon.salida  { background: var(--salida-dim); }
+.registro-icon.entrada { background: var(--entrada-dim); color: var(--entrada); }
+.registro-icon.salida  { background: var(--salida-dim);  color: var(--salida); }
 
 .registro-info {
   flex: 1;
+  min-width: 0;
 }
 
-.registro-tipo {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.registro-fecha {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.registro-hora {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── FEEDBACK / TOAST ───────────────────────────────────────── */
-#toast {
-  position: fixed;
-  bottom: calc(var(--s3) + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 14px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-lg);
-  opacity: 0;
-  transition: opacity 0.3s, transform 0.3s;
-  pointer-events: none;
-  z-index: 999;
-  max-width: calc(100vw - var(--s4));
-  text-align: center;
-  white-space: nowrap;
-}
-
-#toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-#toast.success { border-color: var(--entrada); color: var(--entrada); }
-#toast.error   { border-color: var(--error);   color: var(--error); }
-#toast.info    { border-color: var(--admin);   color: var(--admin); }
+.registro-tipo  { font-weight: 600; font-size: 14px; }
+.registro-fecha { font-size: 12px; color: var(--text-muted); }
+.registro-hora  { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
 /* ── LOADER ─────────────────────────────────────────────────── */
 .loader {
@@ -540,21 +451,9 @@ body {
   to   { transform: scale(1); opacity: 1; }
 }
 
-.confirm-tipo {
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.confirm-hora {
-  font-size: 48px;
-  font-weight: 300;
-  font-variant-numeric: tabular-nums;
-}
-
-.confirm-nombre {
-  font-size: 16px;
-  color: var(--text-secondary);
-}
+.confirm-tipo   { font-size: 28px; font-weight: 700; }
+.confirm-hora   { font-size: 48px; font-weight: 300; font-variant-numeric: tabular-nums; }
+.confirm-nombre { font-size: 16px; color: var(--text-secondary); }
 
 /* ── TABLA ADMIN ────────────────────────────────────────────── */
 .table-wrapper {
@@ -741,6 +640,36 @@ tbody td {
   margin-bottom: var(--s3);
 }
 
+/* ── TOAST ──────────────────────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--surface);
+  border: 1px solid var(--border-hover);
+  color: var(--text-primary);
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  box-shadow: var(--shadow);
+  max-width: calc(100vw - 48px);
+  text-align: center;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+#toast.success { border-color: var(--entrada); color: var(--entrada); }
+#toast.error   { border-color: var(--error);   color: var(--error); }
+
 /* ── MISC ───────────────────────────────────────────────────── */
 .text-sm     { font-size: 13px; }
 .text-xs     { font-size: 12px; }
@@ -783,4 +712,71 @@ tbody td {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── EXTRAS v2.0 ────────────────────────────────────────────── */
+
+/* Cabeceras de tabla ordenables */
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+thead th.sortable:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.05);
+}
+thead th.sorted-asc::after  { content: ' ▲'; color: var(--admin); }
+thead th.sorted-desc::after { content: ' ▼'; color: var(--admin); }
+
+/* Duración de jornada */
+.duracion-jornada {
+  font-size: 12px;
+  color: var(--admin);
+  font-weight: 600;
+  padding: 4px 12px;
+  background: var(--admin-dim);
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+/* Secciones */
+.list-section {
+  padding: 0 var(--s3);
+}
+
+.status-nombre {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.status-hora {
+  font-size: 32px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  margin-top: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: var(--s2);
+}
+
+/* ── SETUP PAGE — estilos para página de primer admin ──────── */
+#page-setup .setup-warning {
+  background: var(--warning-dim);
+  border: 1px solid rgba(255, 179, 0, 0.3);
+  border-radius: var(--radius);
+  padding: var(--s2) var(--s3);
+  margin-bottom: var(--s2);
 }
