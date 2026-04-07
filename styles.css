@@ -981,19 +981,11 @@ tbody tr.jornada-activa td:first-child {
 }
 
 /* ── TABLET / DESKTOP ────────────────────────────────────────── */
+/* Centralizar solo cuando estamos en login/setup, nunca en el dashboard */
 @media (min-width: 600px) {
-  /* Solo limitamos el ancho en páginas de empleado/login, NO en el dashboard admin */
-  body:not(.admin-mode) .app-container,
-  #page-admin-login .app-container,
-  #page-setup .app-container {
-    max-width: 480px;
-    margin: 0 auto;
-  }
-  /* El contenedor principal en modo admin no tiene restricción de ancho */
-}
-
-/* Cuando la página de login/setup está activa, centramos el contenedor */
-@media (min-width: 600px) {
+  /* Login empleado (index.html) */
+  .app-container:has(#page-login.active),
+  /* Login admin y setup */
   .app-container:has(#page-admin-login.active),
   .app-container:has(#page-setup.active) {
     max-width: 480px;
@@ -1002,6 +994,7 @@ tbody tr.jornada-activa td:first-child {
     border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
   }
+  /* El dashboard admin (#page-admin-dashboard.active) NO entra aquí → ancho libre */
 }
 
 /* ── ADMIN DESKTOP — Layout amplio ────────────────────────────── */
