@@ -172,10 +172,12 @@ const Admin = {
     this.renderEmpleados(empleados);
 
     clearInterval(AdminState.pollingTimer);
+    // FIX BUG 2: reducido de 60 s a 15 s + también refresca la tab de registros
     AdminState.pollingTimer = setInterval(() => {
-      if (AdminState.tabActual === 'abiertos') this.consultarAbiertos();
+      if (AdminState.tabActual === 'abiertos')   this.consultarAbiertos();
+      if (AdminState.tabActual === 'registros')  this.consultarRegistros();
       this.actualizarStatAbiertos();
-    }, 60000);
+    }, 15000);
   },
 
   // ── TABS ───────────────────────────────────────────────────
