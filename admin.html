@@ -15,12 +15,12 @@
   <meta name="apple-mobile-web-app-title" content="Admin Fichaje">
 
   <!-- PWA iconos iOS -->
-  <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="admin-icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="admin-icon-192.png">
 
   <!-- PWA manifest -->
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="manifest" href="manifest-admin.json">
+  <link rel="icon" type="image/png" href="admin-icon-192.png">
 
   <!-- Fuentes + CSS -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -343,11 +343,23 @@
       <span style="font-size:12px; color:var(--text-muted);" id="nuevoPinHint"></span>
     </div>
 
-    <div class="input-group mb-3">
+    <div class="input-group mb-2">
       <label class="input-label" for="nuevoEmail">Email (opcional)</label>
       <input type="email" class="input-field" id="nuevoEmail"
              placeholder="empleado@empresa.com"
              autocomplete="email">
+    </div>
+
+    <div class="input-group mb-2">
+      <label class="input-label" for="nuevoDni">DNI / NIE</label>
+      <input type="text" class="input-field" id="nuevoDni"
+             placeholder="Ej: 12345678X">
+    </div>
+
+    <div class="input-group mb-3">
+      <label class="input-label" for="nuevoPuesto">Puesto de trabajo</label>
+      <input type="text" class="input-field" id="nuevoPuesto"
+             placeholder="Ej: Odontólogo, Auxiliar...">
     </div>
 
     <!-- PIN creado — visible solo después de crear -->

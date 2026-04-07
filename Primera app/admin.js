@@ -1,19 +1,16 @@
 // ============================================================
 //  FICHAJE LABORAL — admin.js (Panel Administrador)
-//  Versión: 1.1 — Fixes UX aplicados
+//  Versión: 1.0 MVP
 // ============================================================
 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 
 // ── ESTADO ADMIN ─────────────────────────────────────────────
 const AdminState = {
-  pinAdmin:     null,
-  empleados:    [],
-  registros:    [],
-  tabActual:    'registros',
-  sortCol:      null,
-  sortDir:      'asc',
-  pollingTimer: null
+  pinAdmin:      null,
+  empleados:     [],
+  registros:     [],
+  tabActual:     'registros'
 };
 
 // ── UTILIDADES ───────────────────────────────────────────────
@@ -43,49 +40,24 @@ function fechaHoy() {
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 }
 
-// FIX C2: mensajes de error diferenciados
-function mensajeError(err) {
-  if (err?.message === 'TIMEOUT') return 'El servidor tardó demasiado. Inténtalo en unos segundos.';
-  if (err?.message === 'NETWORK') return 'Sin conexión. Comprueba tu red e inténtalo de nuevo.';
-  return 'Error inesperado. Inténtalo de nuevo.';
-}
-
 // ── API ──────────────────────────────────────────────────────
 
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
   url.searchParams.set('t', Date.now()); // CACHE-BUSTER
-  const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 12000);
-  try {
-    const res = await fetch(url.toString(), { signal: controller.signal, cache: 'no-store' });
-    clearTimeout(timeout);
-    return res.json();
-  } catch (err) {
-    clearTimeout(timeout);
-    if (err.name === 'AbortError') throw new Error('TIMEOUT');
-    throw new Error('NETWORK');
-  }
+  const res = await fetch(url.toString(), { cache: 'no-store' });
+  return res.json();
 }
 
 async function apiPost(body) {
-  const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 12000);
-  try {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal:  controller.signal,
-      body:    JSON.stringify(body)
-    });
-    clearTimeout(timeout);
-    return res.json();
-  } catch (err) {
-    clearTimeout(timeout);
-    if (err.name === 'AbortError') throw new Error('TIMEOUT');
-    throw new Error('NETWORK');
-  }
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store'
+  });
+  return res.json();
 }
 
 // ============================================================
@@ -101,25 +73,23 @@ const Admin = {
     const btn      = document.getElementById('adminLoginBtn');
     const error    = document.getElementById('adminLoginError');
 
-    // FIX C3: validar que hay algo antes de llamar al servidor
-    if (!pin || pin.length < 4) {
-      error.textContent   = 'Introduce tu PIN de administrador.';
-      error.style.display = 'block';
-      pinInput.focus();
-      return;
+    if (!pin) { 
+      error.textContent = 'Introduce tu PIN.';
+      error.style.display = 'block'; 
+      return; 
     }
 
-    btn.disabled        = true;
-    btn.innerHTML       = '<span class="loader"></span>';
+    btn.disabled     = true;
+    btn.innerHTML    = '<span class="loader"></span>';
     error.style.display = 'none';
 
     try {
+      // Verificamos acceso solicitando lista de empleados
       const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: pin });
 
       if (!resp.ok) {
-        // FIX C1: limpiar sessionStorage si el PIN guardado es incorrecto
         sessionStorage.removeItem('admin_pin');
-        error.textContent   = 'Error: ' + (resp.error ? resp.error : 'PIN de administrador incorrecto.');
+        error.textContent   = 'Error: ' + (resp.error ? resp.error : 'PIN incorrecto.');
         error.style.display = 'block';
         pinInput.value      = '';
         pinInput.focus();
@@ -128,28 +98,26 @@ const Admin = {
 
       AdminState.pinAdmin  = pin;
       AdminState.empleados = resp.data.empleados;
+
       sessionStorage.setItem('admin_pin', pin);
 
       this.inicializar(resp.data.empleados);
       showPage('page-admin-dashboard');
       document.getElementById('adminLogoutBtn').style.display = '';
 
-    } catch (err) {
-      // FIX C1: limpiar sesión en error también para evitar bucle
+    } catch(err) {
       sessionStorage.removeItem('admin_pin');
-      // FIX C2: mensaje diferenciado
-      error.textContent   = mensajeError(err);
+      error.textContent   = 'Error de conexión o servidor.';
       error.style.display = 'block';
     } finally {
-      btn.disabled    = false;
-      btn.textContent = 'Acceder';
+      btn.disabled     = false;
+      btn.textContent  = 'Acceder';
     }
   },
 
   logout() {
     sessionStorage.removeItem('admin_pin');
     AdminState.pinAdmin = null;
-    clearInterval(AdminState.pollingTimer);
     document.getElementById('adminPinInput').value = '';
     document.getElementById('adminLogoutBtn').style.display = 'none';
     showPage('page-admin-login');
@@ -157,6 +125,7 @@ const Admin = {
 
   // ── INIT DASHBOARD ─────────────────────────────────────────
   inicializar(empleados) {
+    // Fecha por defecto = hoy
     document.getElementById('filtroFecha').value = fechaHoy();
 
     // Poblar select de empleados
@@ -166,31 +135,28 @@ const Admin = {
       sel.innerHTML += `<option value="${e.id}">${e.nombre}</option>`;
     });
 
+    // Cargar datos iniciales
     this.consultarRegistros();
     this.consultarAbiertos();
     this.renderEmpleados(empleados);
-
-    // FIX M1: polling automático cada 60 segundos
-    clearInterval(AdminState.pollingTimer);
-    AdminState.pollingTimer = setInterval(() => {
-      if (AdminState.tabActual === 'abiertos') this.consultarAbiertos();
-      this.actualizarStatAbiertos();
-    }, 60000);
   },
 
   // ── TABS ───────────────────────────────────────────────────
   switchTab(tab) {
     AdminState.tabActual = tab;
 
+    // Botones
     document.querySelectorAll('.tab-btn').forEach((btn, i) => {
       const tabs = ['registros', 'abiertos', 'empleados'];
       btn.classList.toggle('active', tabs[i] === tab);
     });
 
+    // Contenido
     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
     document.getElementById(`tab-${tab}`).style.display = '';
 
-    if (tab === 'abiertos')  this.consultarAbiertos();
+    // Refrescar al cambiar
+    if (tab === 'abiertos') this.consultarAbiertos();
     if (tab === 'empleados') this.cargarEmpleados();
   },
 
@@ -208,90 +174,48 @@ const Admin = {
       if (idEmpleado) params.idEmpleado = idEmpleado;
 
       const resp = await apiGet(params);
-      if (!resp.ok) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Error al cargar los registros.</td></tr>';
-        return;
-      }
+      if (!resp.ok) { tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Error al cargar</td></tr>'; return; }
 
       const { registros, total } = resp.data;
       AdminState.registros = registros;
 
+      // Stats
       const entradas = registros.filter(r => r.tipo === 'ENTRADA').length;
       const salidas  = registros.filter(r => r.tipo === 'SALIDA').length;
-
       document.getElementById('statTotal').textContent    = total;
       document.getElementById('statEntradas').textContent = entradas;
       document.getElementById('statSalidas').textContent  = salidas;
 
+      // Tabla
       if (!registros.length) {
         tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">📭</div>Sin registros para este filtro.</div></td></tr>';
         info.textContent = '';
         return;
       }
 
-      this.renderTabla(registros);
+      tbody.innerHTML = registros.map(r => `
+        <tr>
+          <td><strong>${r.nombre}</strong><br><span class="text-xs text-muted">${r.idEmpleado}</span></td>
+          <td>
+            <span class="badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}">
+              ${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}
+            </span>
+          </td>
+          <td>${formatFechaLegible(r.fecha)}</td>
+          <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
+          <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0,8)}…</td>
+        </tr>
+      `).join('');
+
       info.textContent = `${total} registro${total !== 1 ? 's' : ''} · ${formatFechaLegible(fecha)}`;
+
+      // Stats de abiertos (consulta separada)
       this.actualizarStatAbiertos();
 
-    } catch (err) {
-      // FIX C2: mensaje diferenciado
-      tbody.innerHTML = `<tr><td colspan="5" class="text-center" style="color:var(--error)">${mensajeError(err)}</td></tr>`;
+    } catch(err) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="color:var(--error)">Error de conexión</td></tr>';
       console.error(err);
     }
-  },
-
-  // FIX B2: tabla ordenable
-  renderTabla(registros) {
-    const tbody = document.getElementById('tablaBody');
-    const cols  = ['nombre', 'tipo', 'fecha', 'hora', 'idRegistro'];
-
-    // Actualizar indicadores de orden en cabeceras
-    document.querySelectorAll('thead th[data-col]').forEach(th => {
-      const col = th.dataset.col;
-      th.classList.toggle('sorted-asc',  AdminState.sortCol === col && AdminState.sortDir === 'asc');
-      th.classList.toggle('sorted-desc', AdminState.sortCol === col && AdminState.sortDir === 'desc');
-    });
-
-    let sorted = [...registros];
-    if (AdminState.sortCol) {
-      sorted.sort((a, b) => {
-        const av = a[AdminState.sortCol] || '';
-        const bv = b[AdminState.sortCol] || '';
-        return AdminState.sortDir === 'asc'
-          ? av.localeCompare(bv)
-          : bv.localeCompare(av);
-      });
-    }
-
-    tbody.innerHTML = sorted.map(r => `
-      <tr>
-        <td><strong>${r.nombre}</strong><br><span class="text-xs text-muted">${r.idEmpleado}</span></td>
-        <td>
-          <span class="badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}">
-            ${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}
-          </span>
-        </td>
-        <td>${formatFechaLegible(r.fecha)}</td>
-        <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
-        <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0, 8)}…</td>
-      </tr>
-    `).join('');
-  },
-
-  sortTabla(col) {
-    if (AdminState.sortCol === col) {
-      AdminState.sortDir = AdminState.sortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-      AdminState.sortCol = col;
-      AdminState.sortDir = 'asc';
-    }
-    if (AdminState.registros.length) this.renderTabla(AdminState.registros);
-  },
-
-  // FIX M5: ir a hoy rápidamente
-  irAHoy() {
-    document.getElementById('filtroFecha').value = fechaHoy();
-    this.consultarRegistros();
   },
 
   async actualizarStatAbiertos() {
@@ -300,7 +224,7 @@ const Admin = {
       if (resp.ok) {
         document.getElementById('statAbiertos').textContent = resp.data.abiertos.length;
       }
-    } catch (_) {}
+    } catch(_) {}
   },
 
   // ── EN JORNADA ─────────────────────────────────────────────
@@ -310,7 +234,7 @@ const Admin = {
 
     try {
       const resp = await apiGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
-      if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
+      if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar</div>'; return; }
 
       const { abiertos } = resp.data;
       document.getElementById('statAbiertos').textContent = abiertos.length;
@@ -321,7 +245,7 @@ const Admin = {
       }
 
       lista.innerHTML = abiertos.map((a, i) => `
-        <div class="registro-item" style="animation-delay:${i * 60}ms">
+        <div class="registro-item" style="animation-delay:${i*60}ms">
           <div class="status-icon en-jornada" style="width:44px;height:44px;font-size:18px;">🟢</div>
           <div class="registro-info">
             <div class="registro-tipo">${a.nombre}</div>
@@ -331,8 +255,8 @@ const Admin = {
         </div>
       `).join('');
 
-    } catch (err) {
-      lista.innerHTML = `<div class="empty-state">${mensajeError(err)}</div>`;
+    } catch(err) {
+      lista.innerHTML = '<div class="empty-state">Error de conexión</div>';
       console.error(err);
     }
   },
@@ -344,13 +268,13 @@ const Admin = {
 
     try {
       const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: AdminState.pinAdmin });
-      if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
+      if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar</div>'; return; }
 
       AdminState.empleados = resp.data.empleados;
       this.renderEmpleados(resp.data.empleados);
 
-    } catch (err) {
-      lista.innerHTML = `<div class="empty-state">${mensajeError(err)}</div>`;
+    } catch(err) {
+      lista.innerHTML = '<div class="empty-state">Error de conexión</div>';
     }
   },
 
@@ -358,59 +282,42 @@ const Admin = {
     const lista = document.getElementById('listaEmpleados');
 
     if (!empleados.length) {
-      lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div>No hay empleados registrados. Crea el primero con el botón "＋ Nuevo".</div>';
+      lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👥</div>No hay empleados registrados.</div>';
       return;
     }
 
     lista.innerHTML = empleados.map((e, i) => `
-      <div class="registro-item" style="animation-delay:${i * 60}ms">
+      <div class="registro-item" style="animation-delay:${i*60}ms">
         <div style="width:44px;height:44px;border-radius:var(--radius-sm);
                     background:var(--surface-2);display:flex;align-items:center;
                     justify-content:center;font-size:20px;flex-shrink:0;">
           👤
         </div>
         <div class="registro-info">
-          <div class="registro-tipo">${e.nombre} <span style="font-weight:400; font-size:0.8em; color:var(--text-muted)">(${e.puesto || 'Sin puesto'})</span></div>
-          <div class="registro-fecha">${e.id} · DNI: ${e.dni || '—'} · Alta: ${formatFechaLegible(e.fechaAlta)}</div>
+          <div class="registro-tipo">${e.nombre}</div>
+          <div class="registro-fecha">${e.id} · Alta: ${formatFechaLegible(e.fechaAlta)}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
           <span class="badge ${e.activo ? 'badge-entrada' : 'badge-error'}">
             ${e.activo ? 'Activo' : 'Inactivo'}
           </span>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm"
-                    onclick="Admin.abrirModalEditarEmpleado('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${e.email || ''}', '${e.dni || ''}', '${e.puesto || ''}')">
-              ✏️
-            </button>
-            <button class="btn btn-ghost btn-sm"
-                    onclick="Admin.toggleEmpleado('${e.id}', ${e.activo})">
-              ${e.activo ? 'Desactivar' : 'Activar'}
-            </button>
-          </div>
+          <button class="btn btn-ghost btn-sm"
+                  onclick="Admin.toggleEmpleado('${e.id}', ${e.activo})">
+            ${e.activo ? 'Desactivar' : 'Activar'}
+          </button>
         </div>
       </div>
     `).join('');
   },
 
-  // FIX A4: reemplazar confirm() nativo por modal propio
   async toggleEmpleado(idEmpleado, estadoActual) {
-    const accion    = estadoActual ? 'desactivar' : 'activar';
-    const empleado  = AdminState.empleados.find(e => e.id === idEmpleado);
-    const nombre    = empleado?.nombre || idEmpleado;
-
-    // Usar modal de confirmación propio
-    const confirmado = await this._confirmar(
-      `¿${accion.charAt(0).toUpperCase() + accion.slice(1)} empleado?`,
-      `${nombre} ${estadoActual ? 'no podrá fichar hasta que lo reactives.' : 'podrá volver a fichar.'}`,
-      accion.charAt(0).toUpperCase() + accion.slice(1),
-      estadoActual ? 'btn-danger' : 'btn-primary'
-    );
-    if (!confirmado) return;
+    const accion = estadoActual ? 'desactivar' : 'activar';
+    if (!confirm(`¿Seguro que quieres ${accion} a este empleado?`)) return;
 
     try {
       const resp = await apiPost({
-        accion:     'admin_toggle_empleado',
-        pinAdmin:   AdminState.pinAdmin,
+        accion: 'admin_toggle_empleado',
+        pinAdmin: AdminState.pinAdmin,
         idEmpleado
       });
 
@@ -420,146 +327,65 @@ const Admin = {
       } else {
         toast(resp.error || 'Error al cambiar estado', 'error');
       }
-    } catch (err) {
-      toast(mensajeError(err), 'error');
+    } catch(err) {
+      toast('Error de conexión', 'error');
     }
-  },
-
-  // Helper: modal de confirmación propio (reemplaza window.confirm)
-  _confirmar(titulo, mensaje, labelOk = 'Confirmar', clsOk = 'btn-primary') {
-    return new Promise(resolve => {
-      document.getElementById('confirmModalTitulo').textContent  = titulo;
-      document.getElementById('confirmModalMensaje').textContent = mensaje;
-      const btnOk = document.getElementById('confirmModalOk');
-      btnOk.textContent = labelOk;
-      btnOk.className   = `btn ${clsOk} flex-1`;
-
-      const backdrop = document.getElementById('modalConfirm');
-      backdrop.classList.add('show');
-
-      const cleanup = result => {
-        backdrop.classList.remove('show');
-        btnOk.onclick    = null;
-        document.getElementById('confirmModalCancel').onclick = null;
-        resolve(result);
-      };
-
-      btnOk.onclick = () => cleanup(true);
-      document.getElementById('confirmModalCancel').onclick = () => cleanup(false);
-    });
   },
 
   // ── MODAL NUEVO EMPLEADO ───────────────────────────────────
   abrirModalNuevoEmpleado() {
-    document.getElementById('modalEmpTitulo').textContent = '➕ Nuevo Empleado';
     document.getElementById('nuevoNombre').value  = '';
     document.getElementById('nuevoPin').value     = '';
     document.getElementById('nuevoEmail').value   = '';
-    document.getElementById('nuevoDni').value     = '';
-    document.getElementById('nuevoPuesto').value  = '';
     document.getElementById('nuevoEmpError').style.display = 'none';
-    document.getElementById('nuevoEmpId').value   = '';      // sin ID = modo crear
-    document.getElementById('nuevoEmpBtn').textContent = 'Crear empleado';
-    document.getElementById('modalNuevoEmp').classList.add('show');
-    setTimeout(() => document.getElementById('nuevoNombre').focus(), 350);
-  },
-
-  // FIX B4: edición de empleado
-  abrirModalEditarEmpleado(id, nombre, email, dni, puesto) {
-    document.getElementById('modalEmpTitulo').textContent = '✏️ Editar Empleado';
-    document.getElementById('nuevoNombre').value  = nombre;
-    document.getElementById('nuevoPin').value     = '';  // no se muestra el PIN actual por seguridad
-    document.getElementById('nuevoEmail').value   = email;
-    document.getElementById('nuevoDni').value     = dni || '';
-    document.getElementById('nuevoPuesto').value  = puesto || '';
-    document.getElementById('nuevoEmpError').style.display = 'none';
-    document.getElementById('nuevoEmpId').value   = id;  // ID = modo editar
-    document.getElementById('nuevoEmpBtn').textContent = 'Guardar cambios';
-
-    // Hint en el PIN al editar
-    document.getElementById('nuevoPinHint').textContent = 'Deja vacío para no cambiar el PIN.';
-
     document.getElementById('modalNuevoEmp').classList.add('show');
     setTimeout(() => document.getElementById('nuevoNombre').focus(), 350);
   },
 
   cerrarModal() {
     document.getElementById('modalNuevoEmp').classList.remove('show');
-    document.getElementById('nuevoPinHint').textContent = '';
   },
 
   async crearEmpleado() {
     const nombre = document.getElementById('nuevoNombre').value.trim();
     const pin    = document.getElementById('nuevoPin').value.trim();
     const email  = document.getElementById('nuevoEmail').value.trim();
-    const dni    = document.getElementById('nuevoDni').value.trim();
-    const puesto = document.getElementById('nuevoPuesto').value.trim();
-    const id     = document.getElementById('nuevoEmpId').value.trim();
     const error  = document.getElementById('nuevoEmpError');
     const btn    = document.getElementById('nuevoEmpBtn');
-    const modoEditar = !!id;
 
-    if (!nombre) {
-      error.textContent = 'El nombre es obligatorio.';
-      error.style.display = 'block';
-      return;
-    }
-
-    // En modo crear el PIN es obligatorio; en editar es opcional
-    if (!modoEditar && (!pin || !/^\d{4}$/.test(pin))) {
+    if (!nombre) { error.textContent = 'El nombre es obligatorio.'; error.style.display = 'block'; return; }
+    if (!pin || pin.length !== 4 || !/^\d+$/.test(pin)) {
       error.textContent = 'El PIN debe ser exactamente 4 dígitos numéricos.';
-      error.style.display = 'block';
-      return;
+      error.style.display = 'block'; return;
     }
 
-    // En modo editar, si se escribe algo en PIN, debe ser válido
-    if (modoEditar && pin && !/^\d{4}$/.test(pin)) {
-      error.textContent = 'El nuevo PIN debe ser exactamente 4 dígitos numéricos (o déjalo vacío).';
-      error.style.display = 'block';
-      return;
-    }
-
-    btn.disabled        = true;
-    btn.innerHTML       = '<span class="loader"></span> Guardando...';
+    btn.disabled    = true;
+    btn.innerHTML   = '<span class="loader"></span> Creando...';
     error.style.display = 'none';
 
     try {
-      const body = {
-        accion:   modoEditar ? 'admin_editar_empleado' : 'admin_nuevo_empleado',
-        pinAdmin: AdminState.pinAdmin,
-        nombre,
-        email,
-        dni,
-        puesto
-      };
-      if (pin)       body.pin       = pin;
-      if (modoEditar) body.idEmpleado = id;
-
-      const resp = await apiPost(body);
+      const resp = await apiPost({
+        accion:    'admin_nuevo_empleado',
+        pinAdmin:  AdminState.pinAdmin,
+        nombre, pin, email
+      });
 
       if (!resp.ok) {
-        error.textContent   = resp.error || 'Error al guardar';
+        error.textContent   = resp.error || 'Error al crear empleado';
         error.style.display = 'block';
         return;
       }
 
-      if (modoEditar) {
-        // FIX B3: confirmar qué se guardó
-        toast(`✅ Empleado actualizado${pin ? ' (PIN cambiado)' : ''}`, 'success', 5000);
-      } else {
-        // FIX B3: mostrar PIN asignado en el toast
-        toast(`✅ "${nombre}" creado · ID: ${resp.data.id} · PIN: ${pin}`, 'success', 7000);
-      }
-
+      toast(`✅ Empleado "${nombre}" creado con ID ${resp.data.id}`, 'success', 5000);
       this.cerrarModal();
       this.cargarEmpleados();
 
-    } catch (err) {
-      error.textContent   = mensajeError(err);
+    } catch(err) {
+      error.textContent   = 'Error de conexión';
       error.style.display = 'block';
     } finally {
       btn.disabled    = false;
-      btn.textContent = modoEditar ? 'Guardar cambios' : 'Crear empleado';
+      btn.textContent = 'Crear empleado';
     }
   },
 
@@ -583,9 +409,8 @@ const Admin = {
       `"${r.observaciones || ''}"`
     ]);
 
-    // FIX M3: UTF-8 con BOM explícito compatible con Excel Mac/Windows
-    const csv  = [cabecera, ...filas].map(f => f.join(',')).join('\r\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const csv = [cabecera, ...filas].map(f => f.join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM para Excel
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     const fecha = document.getElementById('filtroFecha').value || fechaHoy();
@@ -603,15 +428,17 @@ const Admin = {
 // ── INICIALIZACIÓN ───────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
+  // Enter en PIN admin
   document.getElementById('adminPinInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') Admin.login();
   });
 
+  // Enter en modal nuevo empleado
   document.getElementById('nuevoPin').addEventListener('keydown', e => {
     if (e.key === 'Enter') Admin.crearEmpleado();
   });
 
-  // FIX C1: auto-login seguro — limpiar antes si falla
+  // Auto-login si hay sesión
   const pinGuardado = sessionStorage.getItem('admin_pin');
   if (pinGuardado) {
     document.getElementById('adminPinInput').value = pinGuardado;
