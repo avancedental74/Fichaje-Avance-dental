@@ -607,25 +607,25 @@ const Admin = {
       return;
     }
 
-    // ── DNI OBLIGATORIO ───────────────────────────────────────
-    if (!dni) {
+    // ── DNI OBLIGATORIO (solo al crear) ──────────────────────
+    if (!modoEditar && !dni) {
       error.textContent   = 'El DNI / NIE es obligatorio.';
       error.style.display = 'block';
       document.getElementById('nuevoDni').focus();
       return;
     }
 
-    // Formato básico DNI/NIE español
+    // Formato básico DNI/NIE español (si se ha rellenado)
     const dniRegex = /^[0-9XYZ][0-9]{6,7}[A-Z]$/;
-    if (!dniRegex.test(dni)) {
+    if (dni && !dniRegex.test(dni)) {
       error.textContent   = 'Formato de DNI/NIE no válido. Ejemplo: 12345678A o X1234567B';
       error.style.display = 'block';
       document.getElementById('nuevoDni').focus();
       return;
     }
 
-    // ── PUESTO OBLIGATORIO ────────────────────────────────────
-    if (!puesto) {
+    // ── PUESTO OBLIGATORIO (solo al crear) ───────────────────
+    if (!modoEditar && !puesto) {
       error.textContent   = 'El puesto de trabajo es obligatorio.';
       error.style.display = 'block';
       document.getElementById('nuevoPuesto').focus();
