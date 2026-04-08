@@ -188,6 +188,8 @@ function accionFichar(body, ip) {
 
   let tipo, sesionID;
 
+  // Jornada PARTIDA: se permite fichar varias veces al día
+  // ENTRADA → SALIDA → ENTRADA → SALIDA → …
   if (!ultimoReg) {
     tipo     = 'ENTRADA';
     sesionID = generarID();
@@ -195,7 +197,9 @@ function accionFichar(body, ip) {
     tipo     = 'SALIDA';
     sesionID = ultimoReg.sesionID;
   } else if (ultimoReg.tipo === 'SALIDA') {
-    return respErr('La jornada de hoy ya está cerrada. Contacta con tu administrador si necesitas corrección.');
+    // Tras una salida se puede volver a entrar (jornada partida)
+    tipo     = 'ENTRADA';
+    sesionID = generarID();
   } else {
     return respErr('Estado desconocido. Contacta con administración.');
   }

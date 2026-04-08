@@ -35,6 +35,8 @@
   <!-- Fuente + CSS -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Fuente Sora cargada aquí (no en @import del CSS) para evitar bloqueo de renderizado -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap">
   <link rel="stylesheet" href="styles.css">
 
   <!-- Precarga app.js -->
@@ -117,6 +119,9 @@
   ════════════════════════════════════════════════════════════ -->
   <div class="page" id="page-empleado" role="main">
 
+    <!-- Banner de geolocalización -->
+    <div id="geoBanner" style="display:none;"></div>
+
     <!-- Estado actual -->
     <div class="status-display" id="statusDisplay">
       <div class="status-icon libre" id="statusIcon" aria-hidden="true">
@@ -178,7 +183,7 @@
 <!-- ── TOAST ───────────────────────────────────────────────── -->
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=2.4"></script>
+<script src="app.js?v=3.0" defer></script>
 <script>
   // ── PWA INSTALL ─────────────────────────────────────────────
   let deferredPrompt;

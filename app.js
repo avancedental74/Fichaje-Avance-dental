@@ -6,13 +6,26 @@
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 const EMPRESA_NOMBRE  = 'Avance Dental';
 
+// ── GEOFENCING ───────────────────────────────────────────────
+const GEO = {
+  habilitado:  true,
+  lat:         40.5424731,   // Paseo de la Chopera 74, Alcobendas
+  lng:         -3.6419531,
+  radioMetros: 150,
+  watchId:     null
+};
+
+// Detecta iPhone/iPad (iOS no permite geo en background en PWAs)
+const ES_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
 // ── ESTADO GLOBAL ────────────────────────────────────────────
 const State = {
-  pin:        null,
-  nombre:     null,
-  estado:     null,   // LIBRE | EN_JORNADA | JORNADA_CERRADA
-  relojTimer: null,
-  pollingTimer: null
+  pin:          null,
+  nombre:       null,
+  estado:       null,   // LIBRE | EN_JORNADA
+  relojTimer:   null,
+  pollingTimer: null,
+  dentroDelCentro: null  // null = desconocido, true/false cuando tengamos GPS
 };
 
 // ── UTILIDADES ───────────────────────────────────────────────
@@ -53,6 +66,201 @@ function calcularDuracion(horaEntrada, horaSalida) {
 
 function haptic() {
   if ('vibrate' in navigator) navigator.vibrate([30]);
+}
+
+// ── GEOFENCING ───────────────────────────────────────────────
+
+function haversineMetros(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── GEOFENCING AUTOMÁTICO ─────────────────────────────────────
+// Android: watchPosition activo → delega al SW → ficha en background
+// iOS:     watchPosition activo → notificación push → empleado toca → ficha
+// Ambos:   solo activo Lunes–Viernes
+
+let _geoInicializado = false;
+
+// Devuelve true si hoy es día laborable (L–V)
+function esDiaLaboral() {
+  const d = new Date().getDay(); // 0=Dom … 6=Sáb
+  return d >= 1 && d <= 5;
+}
+
+// Pedir permiso de notificaciones (necesario para iOS 16.4+ y Android)
+async function pedirPermisoNotificaciones() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied')  return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+}
+
+// Enviar estado actual al Service Worker para que lo tenga en memoria
+function sincronizarSW(extraData = {}) {
+  if (!navigator.serviceWorker?.controller) return;
+  navigator.serviceWorker.controller.postMessage({
+    tipo:   'SESION',
+    pin:    State.pin,
+    nombre: State.nombre,
+    estado: State.estado,
+    ...extraData
+  });
+}
+
+// Avisar al SW cuando el estado cambia (fichaje manual)
+function notificarEstadoSW() {
+  if (!navigator.serviceWorker?.controller) return;
+  navigator.serviceWorker.controller.postMessage({
+    tipo:   'ESTADO',
+    estado: State.estado
+  });
+}
+
+function iniciarGeofencing() {
+  if (!GEO.habilitado || !navigator.geolocation) return;
+  if (!esDiaLaboral()) {
+    actualizarGeoBanner('finde', 0);
+    return;
+  }
+  _geoInicializado = false;
+
+  // Pedir permiso de notificaciones (no bloqueante)
+  pedirPermisoNotificaciones();
+
+  // Sincronizar sesión con el SW
+  sincronizarSW();
+
+  // NOTA: el listener 'message' del SW ya está registrado en App.init()
+  // No se vuelve a añadir aquí para evitar duplicados en cada login
+
+  const onPos = (pos) => {
+    if (!esDiaLaboral()) return; // doble check por si cambió el día
+
+    const dist   = haversineMetros(pos.coords.latitude, pos.coords.longitude, GEO.lat, GEO.lng);
+    const dentro = dist <= GEO.radioMetros;
+
+    actualizarGeoBanner(dentro, Math.round(dist));
+
+    // Primera lectura: establecer estado inicial SIN fichar
+    if (!_geoInicializado) {
+      _geoInicializado    = true;
+      State.dentroDelCentro = dentro;
+      return;
+    }
+
+    // Sin cambio de zona → nada
+    if (dentro === State.dentroDelCentro) return;
+
+    // ── Cambio de zona detectado ──────────────────────────────
+    State.dentroDelCentro = dentro;
+
+    const necesitaEntrada = dentro  && State.estado === 'LIBRE';
+    const necesitaSalida  = !dentro && State.estado === 'EN_JORNADA';
+    if (!necesitaEntrada && !necesitaSalida) return;
+
+    // Enviar evento al SW — él decide si ficha directo (Android) o notifica (iOS)
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        tipo:   'GEO_EVENTO',
+        dentro,
+        esIOS:  ES_IOS,
+        lat:    pos.coords.latitude,
+        lng:    pos.coords.longitude
+      });
+    }
+
+    // En iOS además mostramos mensaje en la app si está abierta
+    if (ES_IOS) {
+      const msg = dentro
+        ? '📍 Has llegado al centro — toca la notificación para fichar'
+        : '📍 Has salido del centro — toca la notificación para fichar la salida';
+      toast(msg, '', 8000);
+    }
+  };
+
+  const onError = () => {
+    State.dentroDelCentro = null;
+    actualizarGeoBanner(null, null);
+  };
+
+  GEO.watchId = navigator.geolocation.watchPosition(onPos, onError, {
+    enableHighAccuracy: true,
+    maximumAge:  10000,
+    timeout:     20000
+  });
+}
+
+function detenerGeofencing() {
+  if (GEO.watchId !== null) {
+    navigator.geolocation.clearWatch(GEO.watchId);
+    GEO.watchId = null;
+  }
+  navigator.serviceWorker?.removeEventListener?.('message', onMensajeSW);
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.controller.postMessage({ tipo: 'LOGOUT' });
+  }
+  _geoInicializado      = false;
+  State.dentroDelCentro = null;
+}
+
+// ── MENSAJES RECIBIDOS DESDE EL SW ────────────────────────────
+function onMensajeSW(event) {
+  const msg = event.data || {};
+
+  // Android: el SW fichó en background → actualizar UI
+  if (msg.tipo === 'FICHAJE_AUTO_OK') {
+    const nuevoEstado = msg.accion === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+    State.estado = nuevoEstado;
+    App.renderEstado({
+      estado:       nuevoEstado,
+      nombre:       State.nombre,
+      ultimaAccion: { tipo: msg.accion, hora: msg.hora }
+    });
+    App.cargarHistorial();
+    const texto = msg.accion === 'ENTRADA'
+      ? `✅ Entrada automática registrada a las ${msg.hora}`
+      : `✅ Salida automática registrada a las ${msg.hora}`;
+    toast(texto, 'success', 6000);
+    haptic();
+  }
+
+  // iOS: el empleado tocó la notificación → la app está abierta → fichar ahora
+  if (msg.tipo === 'FICHAR_DESDE_NOTIFICACION') {
+    App.ficharAutomatico(msg.accion);
+  }
+}
+
+function actualizarGeoBanner(dentro, distMetros) {
+  const banner = document.getElementById('geoBanner');
+  if (!banner) return;
+
+  if (dentro === 'finde') {
+    banner.style.display = '';
+    banner.textContent   = '📅 Geofencing inactivo — fin de semana';
+    banner.className     = 'geo-banner geo-finde';
+    return;
+  }
+  if (dentro === null) { banner.style.display = 'none'; return; }
+
+  banner.style.display = '';
+  if (dentro) {
+    banner.textContent = ES_IOS
+      ? '📍 En el centro · Recibirás notificación para fichar'
+      : '📍 En el centro · Fichaje automático activo';
+    banner.className   = 'geo-banner geo-dentro';
+  } else {
+    banner.textContent = ES_IOS
+      ? `📍 Fuera del centro (${distMetros}m) · Notificación automática al salir`
+      : `📍 Fuera del centro (${distMetros}m) · Salida automática activa`;
+    banner.className   = 'geo-banner geo-fuera';
+  }
 }
 
 // ── API ──────────────────────────────────────────────────────
@@ -117,7 +325,21 @@ const App = {
       if (e.key === 'Enter') this.login();
     });
 
-    // FIX C1: limpiar sessionStorage corrupto antes de auto-login
+    // Escuchar mensajes del SW (para fichaje desde notificación con app cerrada)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onMensajeSW);
+    }
+
+    // ¿Venimos de una notificación con autofichar pendiente?
+    const params      = new URLSearchParams(window.location.search);
+    const autofichar  = params.get('autofichar');
+    if (autofichar) {
+      // Limpiar el parámetro de la URL sin recargar
+      history.replaceState({}, '', window.location.pathname);
+      // Se fichará automáticamente tras cargar la sesión (ver cargarEmpleado)
+      State._autoficharPendiente = autofichar;
+    }
+
     const pinGuardado = sessionStorage.getItem('fichaje_pin');
     if (pinGuardado) {
       State.pin = pinGuardado;
@@ -162,6 +384,7 @@ const App = {
       this.renderEstado(resp.data);
       this.iniciarReloj();
       this.cargarHistorial();
+      iniciarGeofencing();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
 
@@ -184,6 +407,7 @@ const App = {
     State.estado = null;
     clearInterval(State.relojTimer);
     clearInterval(State.pollingTimer);
+    detenerGeofencing();
     document.getElementById('pinInput').value = '';
     document.getElementById('logoutBtn').style.display = 'none';
     showPage('page-login');
@@ -203,8 +427,16 @@ const App = {
       this.renderEstado(resp.data);
       this.iniciarReloj();
       this.cargarHistorial();
+      iniciarGeofencing();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
+
+      // ¿Venimos de una notificación con fichaje pendiente?
+      if (State._autoficharPendiente) {
+        const accion = State._autoficharPendiente;
+        State._autoficharPendiente = null;
+        setTimeout(() => this.ficharAutomatico(accion), 1000);
+      }
     } catch (_) {
       // FIX C1: limpiar sesión en error de red también
       sessionStorage.removeItem('fichaje_pin');
@@ -216,21 +448,18 @@ const App = {
   renderEstado(data) {
     const { estado, nombre, ultimaAccion } = data;
     State.estado = estado;
+    notificarEstadoSW(); // ← mantener SW sincronizado con el estado real
 
     const iconEl = document.getElementById('statusIcon');
     iconEl.className = 'status-icon ' +
-      (estado === 'LIBRE'      ? 'libre' :
-       estado === 'EN_JORNADA' ? 'en-jornada' : 'cerrada');
+      (estado === 'LIBRE'      ? 'libre' : 'en-jornada');
 
     document.getElementById('statusEmoji').textContent =
-      estado === 'LIBRE'      ? '🟡' :
-      estado === 'EN_JORNADA' ? '🟢' : '🔴';
+      estado === 'LIBRE'      ? '🟡' : '🟢';
 
     document.getElementById('statusNombre').textContent = nombre;
     document.getElementById('statusLabel').textContent =
-      estado === 'LIBRE'           ? 'Sin jornada activa' :
-      estado === 'EN_JORNADA'      ? 'En jornada' :
-      estado === 'JORNADA_CERRADA' ? 'Jornada finalizada hoy' : '';
+      estado === 'EN_JORNADA' ? 'En jornada' : 'Libre — listo para fichar';
 
     const uaEl = document.getElementById('ultimaAccion');
     if (ultimaAccion) {
@@ -247,7 +476,7 @@ const App = {
     if (estado === 'LIBRE') {
       btn.className        = 'btn btn-entrada btn-full';
       btnText.textContent  = '▶ Registrar Entrada';
-      subTexto.textContent = 'Inicia tu jornada laboral';
+      subTexto.textContent = ultimaAccion ? 'Puedes registrar otro turno' : 'Inicia tu jornada laboral';
       btn.disabled         = false;
     } else if (estado === 'EN_JORNADA') {
       btn.className        = 'btn btn-salida btn-full';
@@ -255,10 +484,10 @@ const App = {
       subTexto.textContent = `Jornada iniciada a las ${ultimaAccion?.hora || '--:--'}`;
       btn.disabled         = false;
     } else {
-      btn.className        = 'btn btn-ghost btn-full';
-      btnText.textContent  = '✓ Jornada completada';
-      subTexto.textContent = 'Hasta mañana 👋';
-      btn.disabled         = true;
+      btn.className        = 'btn btn-entrada btn-full';
+      btnText.textContent  = '▶ Registrar Entrada';
+      subTexto.textContent = 'Inicia tu jornada laboral';
+      btn.disabled         = false;
     }
   },
 
@@ -273,14 +502,20 @@ const App = {
     btnText.textContent  = 'Registrando...';
     haptic();
 
+    // Geolocalización en paralelo con el timeout de red (no bloquea el botón)
     let latitud = '', longitud = '';
-    try {
-      const pos = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000 })
+    const geoPromise = new Promise((res) => {
+      if (!navigator.geolocation) return res();
+      navigator.geolocation.getCurrentPosition(
+        pos => { latitud = pos.coords.latitude; longitud = pos.coords.longitude; res(); },
+        () => res(),
+        { timeout: 4000, maximumAge: 30000 }
       );
-      latitud  = pos.coords.latitude;
-      longitud = pos.coords.longitude;
-    } catch (_) {}
+      // Si la geo tarda más de 2 s no esperamos — fichamos sin coordenadas
+      setTimeout(res, 2000);
+    });
+
+    await geoPromise; // máximo 2 s de espera por la geo
 
     try {
       const resp = await apiPost({ accion: 'fichar', pin: State.pin, latitud, longitud });
@@ -295,7 +530,8 @@ const App = {
 
       // ACTUALIZAR ESTADO INMEDIATAMENTE con la respuesta
       const tipo = resp.data.tipo;
-      const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'JORNADA_CERRADA';
+      // Tras una SALIDA el estado vuelve a LIBRE (jornada partida permitida)
+      const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
       this.renderEstado({
         estado: nuevoEstado,
         nombre: State.nombre,
@@ -317,6 +553,71 @@ const App = {
       toast(mensajeError(err), 'error');
       btn.disabled = false;
       console.error(err);
+    }
+  },
+
+  // ── FICHAJE AUTOMÁTICO (geofencing) ───────────────────────
+  // Llamado por el geofencing. tipoEsperado = 'ENTRADA' | 'SALIDA'
+  // Verifica de nuevo el estado antes de fichar para evitar duplicados
+  // si el botón manual ya fichó mientras tanto.
+  async ficharAutomatico(tipoEsperado) {
+    if (!State.pin) return;
+
+    // Doble-check: releer estado del servidor antes de actuar
+    try {
+      const check = await apiGet({ accion: 'estado', pin: State.pin });
+      if (!check.ok) return;
+      const estadoActual = check.data.estado;
+      // Si ya está en el estado correcto, no hace falta fichar
+      if (tipoEsperado === 'ENTRADA' && estadoActual !== 'LIBRE')     return;
+      if (tipoEsperado === 'SALIDA'  && estadoActual !== 'EN_JORNADA') return;
+      // Actualizar estado local por si el manual lo cambió
+      this.renderEstado(check.data);
+    } catch (_) { return; }
+
+    // Obtener coordenadas actuales
+    let latitud = '', longitud = '';
+    try {
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 10000 })
+      );
+      latitud  = pos.coords.latitude;
+      longitud = pos.coords.longitude;
+    } catch (_) {}
+
+    try {
+      const resp = await apiPost({
+        accion: 'fichar', pin: State.pin, latitud, longitud,
+        observaciones: 'Fichaje automático por geolocalización'
+      });
+
+      if (!resp.ok) {
+        toast('⚠️ No se pudo registrar el fichaje automático: ' + (resp.error || ''), 'error', 5000);
+        return;
+      }
+
+      const tipo       = resp.data.tipo;
+      const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+      this.renderEstado({
+        estado: nuevoEstado,
+        nombre: State.nombre,
+        ultimaAccion: { tipo, hora: resp.data.hora }
+      });
+
+      const msg = tipo === 'ENTRADA'
+        ? `✅ Entrada automática registrada a las ${resp.data.hora}`
+        : `✅ Salida automática registrada a las ${resp.data.hora}`;
+      toast(msg, 'success', 5000);
+      haptic();
+
+      setTimeout(() => {
+        this.refrescarEstadoConGuardia(nuevoEstado);
+        this.cargarHistorial();
+      }, 4000);
+
+    } catch (err) {
+      toast('⚠️ Error en fichaje automático: ' + mensajeError(err), 'error', 5000);
+      console.error('ficharAutomatico error:', err);
     }
   },
 
@@ -397,42 +698,71 @@ const App = {
         porFecha[r.fecha].push(r);
       });
 
-      let html = '';
-      Object.entries(porFecha).forEach(([fecha, regs], gi) => {
-        html += `<div class="section-title" style="margin-top:${gi > 0 ? '16px' : '0'}">${formatFechaLegible(fecha)}</div>`;
+      // FIX XSS: construir el DOM con createElement — los valores del servidor
+      // se asignan con textContent y nunca se interpretan como HTML.
+      const fragment = document.createDocumentFragment();
 
-        // FIX M2: calcular duración de jornada por día
+      Object.entries(porFecha).forEach(([fecha, regs], gi) => {
+        const tituloEl = document.createElement('div');
+        tituloEl.className = 'section-title';
+        tituloEl.style.marginTop = gi > 0 ? '16px' : '0';
+        tituloEl.textContent = formatFechaLegible(fecha); // función pura, solo letras y números
+
+        fragment.appendChild(tituloEl);
+
+        // Calcular duración de jornada por día
         const entradas = regs.filter(r => r.tipo === 'ENTRADA');
         const salidas  = regs.filter(r => r.tipo === 'SALIDA');
-        let duracion = null;
         if (entradas.length && salidas.length) {
-          duracion = calcularDuracion(entradas[0].hora, salidas[salidas.length - 1].hora);
-        }
-
-        if (duracion) {
-          html += `<div class="duracion-jornada">⏱ Jornada: ${duracion}</div>`;
+          const duracion = calcularDuracion(entradas[0].hora, salidas[salidas.length - 1].hora);
+          if (duracion) {
+            const durEl = document.createElement('div');
+            durEl.className = 'duracion-jornada';
+            durEl.textContent = `⏱ Jornada: ${duracion}`;
+            fragment.appendChild(durEl);
+          }
         }
 
         regs.forEach((r, i) => {
           const esEntrada = r.tipo === 'ENTRADA';
           const delay     = (gi * 2 + i) * 60;
-          html += `
-            <div class="registro-item" style="animation-delay:${delay}ms">
-              <div class="registro-icon ${esEntrada ? 'entrada' : 'salida'}">
-                ${esEntrada ? '▶' : '■'}
-              </div>
-              <div class="registro-info">
-                <div class="registro-tipo" style="color:${esEntrada ? 'var(--entrada)' : 'var(--salida)'}">
-                  ${esEntrada ? 'Entrada' : 'Salida'}
-                </div>
-                <div class="registro-fecha">${formatFechaLegible(r.fecha)}</div>
-              </div>
-              <div class="registro-hora">${r.hora}</div>
-            </div>`;
+
+          const item = document.createElement('div');
+          item.className = 'registro-item';
+          item.style.animationDelay = `${delay}ms`;
+
+          const icon = document.createElement('div');
+          icon.className = `registro-icon ${esEntrada ? 'entrada' : 'salida'}`;
+          icon.textContent = esEntrada ? '▶' : '■';
+
+          const info = document.createElement('div');
+          info.className = 'registro-info';
+
+          const tipoEl = document.createElement('div');
+          tipoEl.className = 'registro-tipo';
+          tipoEl.style.color = esEntrada ? 'var(--entrada)' : 'var(--salida)';
+          tipoEl.textContent = esEntrada ? 'Entrada' : 'Salida';
+
+          const fechaEl = document.createElement('div');
+          fechaEl.className = 'registro-fecha';
+          fechaEl.textContent = formatFechaLegible(r.fecha);
+
+          info.appendChild(tipoEl);
+          info.appendChild(fechaEl);
+
+          const horaEl = document.createElement('div');
+          horaEl.className = 'registro-hora';
+          horaEl.textContent = r.hora; // textContent — nunca innerHTML
+
+          item.appendChild(icon);
+          item.appendChild(info);
+          item.appendChild(horaEl);
+          fragment.appendChild(item);
         });
       });
 
-      lista.innerHTML = html;
+      lista.innerHTML = '';
+      lista.appendChild(fragment);
 
     } catch (err) {
       lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div>Error al cargar historial.</div>';

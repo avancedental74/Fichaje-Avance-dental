@@ -5,7 +5,8 @@
    ============================================================ */
 
 /* ── GOOGLE FONTS ───────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap');
+/* La fuente Sora se carga desde <link> en el HTML (más rápido que @import).
+   Ver <link rel="stylesheet" href="...fonts.googleapis.com..."> en index.html y admin.html */
 
 /* ── RESET ───────────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -1119,4 +1120,31 @@ tbody tr.jornada-activa td:first-child {
     /* El padding-top ya viene del app-container (.app-container con var(--sat)) */
     padding-top: 14px;
   }
+}
+
+/* ── GEOFENCING BANNER ───────────────────────────────────────── */
+.geo-banner {
+  margin: 0 var(--s3) 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.4;
+  animation: fadeIn .3s ease;
+}
+.geo-dentro {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--entrada, #22c55e);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+.geo-fuera {
+  background: rgba(239, 68, 68, 0.10);
+  color: var(--salida, #ef4444);
+  border: 1px solid rgba(239, 68, 68, 0.20);
+}
+.geo-finde {
+  background: rgba(148, 163, 184, 0.10);
+  color: var(--text-muted, #94a3b8);
+  border: 1px solid rgba(148, 163, 184, 0.20);
 }

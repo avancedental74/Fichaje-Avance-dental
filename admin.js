@@ -51,6 +51,7 @@ function mensajeError(err) {
 
 // ── API ──────────────────────────────────────────────────────
 
+// apiGet: solo para peticiones SIN credenciales (caché buster público)
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -69,9 +70,10 @@ async function apiGet(params) {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  FIX CRÍTICO: Google Apps Script no acepta Content-Type: application/json
-//  en peticiones cross-origin desde PWAs instaladas.
-//  Solución: enviar como text/plain — el servidor lo parsea igual con JSON.parse()
+//  FIX SEGURIDAD: Las peticiones de admin que incluyen pinAdmin
+//  se envían siempre por POST (body cifrado en tránsito, nunca
+//  en la URL donde quedaría en logs, historial y proxies).
+//  Google Apps Script lo parsea igual con JSON.parse(e.postData.contents)
 // ─────────────────────────────────────────────────────────────
 async function apiPost(body) {
   const controller = new AbortController();
@@ -79,8 +81,6 @@ async function apiPost(body) {
   try {
     const res = await fetch(APPS_SCRIPT_URL, {
       method:  'POST',
-      // NO se pone Content-Type aquí — Apps Script lo acepta como text/plain
-      // y en Code.gs se parsea con JSON.parse(e.postData.contents)
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       signal:  controller.signal,
       body:    JSON.stringify(body)
@@ -92,6 +92,14 @@ async function apiPost(body) {
     if (err.name === 'AbortError') throw new Error('TIMEOUT');
     throw new Error('NETWORK');
   }
+}
+
+// apiAdminGet: wrapper seguro — envía pinAdmin por POST, no por URL
+// Úsalo en lugar de apiGet para cualquier acción que requiera pinAdmin
+async function apiAdminGet(params) {
+  // Separar pinAdmin del resto de parámetros de lectura
+  const { pinAdmin, ...rest } = params;
+  return apiPost({ ...rest, pinAdmin });
 }
 
 // ============================================================
@@ -119,7 +127,7 @@ const Admin = {
     error.style.display = 'none';
 
     try {
-      const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: pin });
+      const resp = await apiAdminGet({ accion: 'admin_empleados', pinAdmin: pin });
 
       if (!resp.ok) {
         sessionStorage.removeItem('admin_pin');
@@ -164,7 +172,11 @@ const Admin = {
     const sel = document.getElementById('filtroEmpleado');
     sel.innerHTML = '<option value="">Todos los empleados</option>';
     empleados.filter(e => e.activo).forEach(e => {
-      sel.innerHTML += `<option value="${e.id}">${e.nombre}</option>`;
+      // FIX XSS: usar createElement para que el nombre nunca se interprete como HTML
+      const opt = document.createElement('option');
+      opt.value       = e.id;
+      opt.textContent = e.nombre;
+      sel.appendChild(opt);
     });
 
     this.consultarRegistros();
@@ -207,7 +219,7 @@ const Admin = {
       const params = { accion: 'admin_dia', pinAdmin: AdminState.pinAdmin, fecha };
       if (idEmpleado) params.idEmpleado = idEmpleado;
 
-      const resp = await apiGet(params);
+      const resp = await apiAdminGet(params);
       if (!resp.ok) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Error al cargar los registros.</td></tr>';
         return;
@@ -314,7 +326,7 @@ const Admin = {
 
   async actualizarStatAbiertos() {
     try {
-      const resp = await apiGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
+      const resp = await apiAdminGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
       if (resp.ok) {
         document.getElementById('statAbiertos').textContent = resp.data.abiertos.length;
       }
@@ -327,7 +339,7 @@ const Admin = {
     lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div>';
 
     try {
-      const resp = await apiGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
+      const resp = await apiAdminGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
       if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
 
       const { abiertos } = resp.data;
@@ -361,7 +373,7 @@ const Admin = {
     lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div>';
 
     try {
-      const resp = await apiGet({ accion: 'admin_empleados', pinAdmin: AdminState.pinAdmin });
+      const resp = await apiAdminGet({ accion: 'admin_empleados', pinAdmin: AdminState.pinAdmin });
       if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
 
       AdminState.empleados = resp.data.empleados;
@@ -380,34 +392,73 @@ const Admin = {
       return;
     }
 
-    lista.innerHTML = empleados.map((e, i) => `
-      <div class="registro-item" style="animation-delay:${i * 60}ms">
-        <div style="width:44px;height:44px;border-radius:var(--radius-sm);
-                    background:var(--surface-2);display:flex;align-items:center;
-                    justify-content:center;font-size:20px;flex-shrink:0;">
-          👤
-        </div>
-        <div class="registro-info">
-          <div class="registro-tipo">${e.nombre} <span style="font-weight:400; font-size:0.8em; color:var(--text-muted)">(${e.puesto || 'Sin puesto'})</span></div>
-          <div class="registro-fecha">${e.id} · DNI: ${e.dni || '—'} · Alta: ${formatFechaLegible(e.fechaAlta)}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="badge ${e.activo ? 'badge-entrada' : 'badge-error'}">
-            ${e.activo ? 'Activo' : 'Inactivo'}
-          </span>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm"
-                    onclick="Admin.abrirModalEditarEmpleado('${e.id}', '${e.nombre.replace(/'/g, "\\'")}', '${e.email || ''}', '${e.dni || ''}', '${e.puesto || ''}')">
-              ✏️
-            </button>
-            <button class="btn btn-ghost btn-sm"
-                    onclick="Admin.toggleEmpleado('${e.id}', ${e.activo})">
-              ${e.activo ? 'Desactivar' : 'Activar'}
-            </button>
-          </div>
-        </div>
-      </div>
-    `).join('');
+    // FIX XSS: construir cada tarjeta con createElement para que los datos del
+    // servidor nunca se interpreten como HTML/JS, independientemente de su valor.
+    const fragment = document.createDocumentFragment();
+
+    empleados.forEach((e, i) => {
+      const item = document.createElement('div');
+      item.className = 'registro-item';
+      item.style.animationDelay = `${i * 60}ms`;
+
+      const avatar = document.createElement('div');
+      avatar.style.cssText = 'width:44px;height:44px;border-radius:var(--radius-sm);background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;';
+      avatar.textContent = '👤';
+
+      const info = document.createElement('div');
+      info.className = 'registro-info';
+
+      const nombreEl = document.createElement('div');
+      nombreEl.className = 'registro-tipo';
+      nombreEl.textContent = e.nombre;
+      const puestoSpan = document.createElement('span');
+      puestoSpan.style.cssText = 'font-weight:400;font-size:0.8em;color:var(--text-muted)';
+      puestoSpan.textContent = ` (${e.puesto || 'Sin puesto'})`;
+      nombreEl.appendChild(puestoSpan);
+
+      const metaEl = document.createElement('div');
+      metaEl.className = 'registro-fecha';
+      metaEl.textContent = `${e.id} · DNI: ${e.dni || '—'} · Alta: ${formatFechaLegible(e.fechaAlta)}`;
+
+      info.appendChild(nombreEl);
+      info.appendChild(metaEl);
+
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:6px;';
+
+      const badge = document.createElement('span');
+      badge.className = `badge ${e.activo ? 'badge-entrada' : 'badge-error'}`;
+      badge.textContent = e.activo ? 'Activo' : 'Inactivo';
+
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:6px;';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.className = 'btn btn-ghost btn-sm';
+      btnEdit.textContent = '✏️';
+      // Datos pasados por closure — nunca interpolados en HTML
+      btnEdit.addEventListener('click', () =>
+        Admin.abrirModalEditarEmpleado(e.id, e.nombre, e.email || '', e.dni || '', e.puesto || '')
+      );
+
+      const btnToggle = document.createElement('button');
+      btnToggle.className = 'btn btn-ghost btn-sm';
+      btnToggle.textContent = e.activo ? 'Desactivar' : 'Activar';
+      btnToggle.addEventListener('click', () => Admin.toggleEmpleado(e.id, e.activo));
+
+      btnRow.appendChild(btnEdit);
+      btnRow.appendChild(btnToggle);
+      actions.appendChild(badge);
+      actions.appendChild(btnRow);
+
+      item.appendChild(avatar);
+      item.appendChild(info);
+      item.appendChild(actions);
+      fragment.appendChild(item);
+    });
+
+    lista.innerHTML = '';
+    lista.appendChild(fragment);
   },
 
   async toggleEmpleado(idEmpleado, estadoActual) {
