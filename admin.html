@@ -42,15 +42,81 @@
            role="img" aria-label="Admin">🛡</div>
       <span class="app-logo-text">Panel Admin</span>
     </div>
-    <button class="header-action" id="adminInstallBtn" style="display:none"
+    <button class="header-action" id="adminInstallBtn"
             onclick="installPWA()" aria-label="Instalar aplicación">
-      📲 Instalar
+      📲 Instalar app
     </button>
     <button class="header-action" id="adminLogoutBtn" style="display:none"
             onclick="Admin.logout()" aria-label="Cerrar sesión de administrador">
       Cerrar sesión
     </button>
   </header>
+
+  <!-- ── MODAL INSTRUCCIONES INSTALACIÓN MANUAL ─────────────── -->
+  <div id="modalInstall" style="display:none; position:fixed; inset:0; z-index:9999;
+       background:rgba(0,0,0,0.75); padding:24px; align-items:flex-end;"
+       onclick="document.getElementById('modalInstall').style.display='none'">
+    <div onclick="event.stopPropagation()"
+         style="background:var(--surface); border-radius:20px; padding:28px 24px;
+                width:100%; max-width:420px; margin:0 auto;">
+      <div style="font-size:28px; text-align:center; margin-bottom:12px;">📲</div>
+      <h2 style="font-size:18px; font-weight:700; text-align:center; margin-bottom:6px;">
+        Instalar app de Fichaje
+      </h2>
+      <p style="font-size:14px; color:var(--text-secondary); text-align:center; margin-bottom:20px;">
+        Para instalar la app de fichaje de empleados en este móvil:
+      </p>
+      <div id="installStepsAndroid" style="display:none;">
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">1️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Abre Chrome y ve a la URL de la app de fichaje (<strong style="color:var(--text-primary)">index.html</strong>)</span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">2️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Toca el menú <strong style="color:var(--text-primary)">⋮</strong> (tres puntos, arriba a la derecha)</span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">3️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Selecciona <strong style="color:var(--text-primary)">«Añadir a pantalla de inicio»</strong> o <strong style="color:var(--text-primary)">«Instalar aplicación»</strong></span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">4️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Confirma tocando <strong style="color:var(--text-primary)">«Instalar»</strong></span>
+          </div>
+        </div>
+      </div>
+      <div id="installStepsIOS" style="display:none;">
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">1️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Abre Safari y ve a la URL de la app de fichaje (<strong style="color:var(--text-primary)">index.html</strong>)</span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">2️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Toca el botón de compartir <strong style="color:var(--text-primary)">⬆</strong> (abajo en el centro)</span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">3️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Desplázate y toca <strong style="color:var(--text-primary)">«Añadir a pantalla de inicio»</strong></span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <span style="font-size:20px; flex-shrink:0;">4️⃣</span>
+            <span style="font-size:14px; color:var(--text-secondary);">Toca <strong style="color:var(--text-primary)">«Añadir»</strong> arriba a la derecha</span>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:20px; padding:12px; background:var(--surface-2);
+                  border-radius:12px; font-size:13px; color:var(--text-muted); text-align:center;">
+        ℹ️ La app de admin que tienes instalada es independiente.<br>
+        La de fichaje se instala por separado desde su propia URL.
+      </div>
+      <button class="btn btn-primary btn-full mt-3"
+              onclick="document.getElementById('modalInstall').style.display='none'">
+        Entendido
+      </button>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════════
        PÁGINA 0: SETUP — PRIMER ADMIN
@@ -472,24 +538,42 @@
 <script>
   // ── PWA INSTALL ─────────────────────────────────────────────
   let deferredPrompt;
+  const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    document.getElementById('adminInstallBtn').style.display = '';
+    // Si Chrome nos da el prompt automático, úsalo
   });
 
   function installPWA() {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then((result) => {
-      if (result.outcome === 'accepted') {
-        console.log('PWA instalada');
-      }
-      deferredPrompt = null;
-      document.getElementById('adminInstallBtn').style.display = 'none';
-    });
+    if (deferredPrompt) {
+      // Chrome Android: prompt nativo de instalación
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((result) => {
+        deferredPrompt = null;
+        if (result.outcome === 'accepted') {
+          document.getElementById('adminInstallBtn').style.display = 'none';
+        }
+      });
+    } else {
+      // No hay prompt automático (ya instalada como admin, o iOS):
+      // Mostrar instrucciones manuales para instalar la app de EMPLEADOS
+      const modal = document.getElementById('modalInstall');
+      const stepsAndroid = document.getElementById('installStepsAndroid');
+      const stepsIOS = document.getElementById('installStepsIOS');
+      stepsAndroid.style.display = esIOS ? 'none' : '';
+      stepsIOS.style.display     = esIOS ? '' : 'none';
+      modal.style.display = 'flex';
+    }
   }
+
+  // Ocultar botón solo si la PWA de fichaje (no admin) ya está instalada
+  // Esto es difícil de detectar, así que lo dejamos siempre visible
+  // salvo que el propio beforeinstallprompt no llegue Y estemos en modo standalone
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+  });
 
   // La columna Estado se rellena directamente en admin.js → renderTabla().
   // No se necesita ningún observador externo.

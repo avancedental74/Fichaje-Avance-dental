@@ -1,12 +1,17 @@
 {
+  "id": "/admin",
   "name": "Fichaje ADMIN",
   "short_name": "Admin Fichaje",
   "description": "Panel de Administración del Fichaje Laboral",
   "start_url": "./admin.html",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0f172a",
   "theme_color": "#3b82f6",
   "orientation": "portrait",
+  "lang": "es",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "./admin-icon-192.png",
@@ -20,6 +25,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "categories": ["business", "productivity"]
+  ]
 }
