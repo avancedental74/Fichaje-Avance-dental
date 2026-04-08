@@ -298,26 +298,68 @@ const Admin = {
       });
     }
 
-    tbody.innerHTML = sorted.map(r => {
+    // FIX XSS: construir filas con createElement para que los datos del servidor
+    // (nombre, idEmpleado, idRegistro…) nunca se evalúen como HTML/JS.
+    const fragment = document.createDocumentFragment();
+
+    sorted.forEach(r => {
       const esAbierto = abiertosIds.has(r.idRegistro);
-      const estadoCelda = esAbierto
-        ? '<span class="badge-activa">🟢 En jornada</span>'
-        : '<span class="badge-cerrado">—</span>';
-      const trClass = esAbierto ? ' class="jornada-activa"' : '';
-      return `
-        <tr${trClass}>
-          <td><strong>${r.nombre}</strong><br><span class="text-xs text-muted">${r.idEmpleado}</span></td>
-          <td>
-            <span class="badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}">
-              ${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}
-            </span>
-          </td>
-          <td>${estadoCelda}</td>
-          <td>${formatFechaLegible(r.fecha)}</td>
-          <td style="font-variant-numeric:tabular-nums; font-weight:700;">${r.hora}</td>
-          <td class="text-xs text-muted" style="font-family:monospace;">${r.idRegistro.slice(0, 8)}…</td>
-        </tr>`;
-    }).join('');
+
+      const tr = document.createElement('tr');
+      if (esAbierto) tr.className = 'jornada-activa';
+
+      // Celda nombre + ID empleado
+      const tdNombre = document.createElement('td');
+      const strong = document.createElement('strong');
+      strong.textContent = r.nombre;
+      const br = document.createElement('br');
+      const spanId = document.createElement('span');
+      spanId.className = 'text-xs text-muted';
+      spanId.textContent = r.idEmpleado;
+      tdNombre.appendChild(strong);
+      tdNombre.appendChild(br);
+      tdNombre.appendChild(spanId);
+
+      // Celda tipo (ENTRADA/SALIDA) — valor acotado, pero sanitizado igualmente
+      const tdTipo = document.createElement('td');
+      const badgeTipo = document.createElement('span');
+      badgeTipo.className = `badge ${r.tipo === 'ENTRADA' ? 'badge-entrada' : 'badge-salida'}`;
+      badgeTipo.textContent = `${r.tipo === 'ENTRADA' ? '▶' : '■'} ${r.tipo}`;
+      tdTipo.appendChild(badgeTipo);
+
+      // Celda estado jornada
+      const tdEstado = document.createElement('td');
+      const badgeEstado = document.createElement('span');
+      badgeEstado.className = esAbierto ? 'badge-activa' : 'badge-cerrado';
+      badgeEstado.textContent = esAbierto ? '🟢 En jornada' : '—';
+      tdEstado.appendChild(badgeEstado);
+
+      // Celda fecha — formatFechaLegible devuelve texto plano seguro
+      const tdFecha = document.createElement('td');
+      tdFecha.textContent = formatFechaLegible(r.fecha);
+
+      // Celda hora
+      const tdHora = document.createElement('td');
+      tdHora.style.cssText = 'font-variant-numeric:tabular-nums; font-weight:700;';
+      tdHora.textContent = r.hora;
+
+      // Celda ID registro (truncado)
+      const tdId = document.createElement('td');
+      tdId.className = 'text-xs text-muted';
+      tdId.style.fontFamily = 'monospace';
+      tdId.textContent = r.idRegistro.slice(0, 8) + '…';
+
+      tr.appendChild(tdNombre);
+      tr.appendChild(tdTipo);
+      tr.appendChild(tdEstado);
+      tr.appendChild(tdFecha);
+      tr.appendChild(tdHora);
+      tr.appendChild(tdId);
+      fragment.appendChild(tr);
+    });
+
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
   },
 
   sortTabla(col) {
@@ -391,7 +433,7 @@ const Admin = {
               <div class="registro-tipo">${sanitizar(al.nombre)}</div>
               <div class="registro-fecha">
                 Turno ${sanitizar(al.turnoEntrada)} —
-                <strong style="color:var(--error, #e53e3e)">sin fichar · ${al.minutosRetraso} min de retraso</strong>
+                <strong style="color:var(--error, #e53e3e)">sin fichar · ${sanitizar(al.minutosRetraso)} min de retraso</strong>
               </div>
             </div>
             <span class="badge badge-error" style="background:var(--error,#e53e3e);color:#fff;white-space:nowrap;">No fichado</span>

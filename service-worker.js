@@ -376,10 +376,13 @@ async function guardarEstadoEnIDB(estado) {
   await guardarSesionEnIDB();
 }
 
-// ── Geofencing config (espejado de app.js) ────────────────────
-const GEO_LAT   = 40.5424731;
-const GEO_LNG   = -3.6419531;
-const GEO_RADIO = 150;
+// ── Geofencing config ─────────────────────────────────────────
+// Valores por defecto (fallback). La fuente de verdad es app.js:
+// cuando envía el mensaje SESION, puede incluir geoLat/geoLng/geoRadio
+// y el SW los adopta sin necesidad de modificar este archivo.
+let GEO_LAT   = 40.5424731;
+let GEO_LNG   = -3.6419531;
+let GEO_RADIO = 150;
 
 function haversineMetros(lat1, lng1, lat2, lng2) {
   const R    = 6371000;
@@ -416,6 +419,11 @@ self.addEventListener('message', event => {
       sw.nombre = msg.nombre;
       sw.estado = msg.estado;
       sw.turnos = msg.turnos || [];
+      // Coordenadas de geofencing: si app.js las envía, el SW las adopta.
+      // Así un cambio de dirección solo requiere editar app.js.
+      if (msg.geoLat   != null) GEO_LAT   = msg.geoLat;
+      if (msg.geoLng   != null) GEO_LNG   = msg.geoLng;
+      if (msg.geoRadio != null) GEO_RADIO = msg.geoRadio;
       guardarSesionEnIDB();
       // Intentar registrar periodic sync si aún no está registrado
       registrarPeriodicSync();
