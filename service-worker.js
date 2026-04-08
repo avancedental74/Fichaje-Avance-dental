@@ -160,11 +160,26 @@ async function comprobarGeoYFichar() {
   }
 
   if (ventana.tipo === 'SALIDA' && dentro) {
-    // Aún sigue dentro — no fichar salida todavía
+    // Sigue dentro del centro en ventana de salida → recordatorio manual
+    await mostrarNotificacion(
+      '🔴 ¿Has olvidado fichar la salida?',
+      `${sw.nombre} — Sigues en el centro. Toca para registrar tu salida.`,
+      'SALIDA', lat, lng
+    );
     return;
   }
 
-  // Condiciones cumplidas → fichar
+  if (ventana.tipo === 'ENTRADA' && dentro) {
+    // Está dentro pero no ha fichado la entrada → recordatorio manual
+    await mostrarNotificacion(
+      '🟢 ¿Has olvidado fichar la entrada?',
+      `${sw.nombre} — Estás en el centro. Toca para registrar tu entrada.`,
+      'ENTRADA', lat, lng
+    );
+    return;
+  }
+
+  // Condiciones cumplidas → fichar automáticamente (salió del centro)
   const ok = await ficharDesdeSW(lat, lng, `Fichaje automático Periodic Sync (${ventana.tipo})`);
   const emoji = ventana.tipo === 'ENTRADA' ? '🟢' : '🔴';
 
