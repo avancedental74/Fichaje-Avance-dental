@@ -195,10 +195,11 @@ const Admin = {
     this.renderEmpleados(empleados);
 
     clearInterval(AdminState.pollingTimer);
+    // FIX: reducido de 60s a 30s para que el estado "En jornada" se refresque más rápido
     AdminState.pollingTimer = setInterval(() => {
       if (AdminState.tabActual === 'abiertos') this.consultarAbiertos();
       this.actualizarStatAbiertos();
-    }, 60000);
+    }, 30000);
   },
 
   // ── TABS ───────────────────────────────────────────────────
@@ -411,12 +412,29 @@ const Admin = {
 
       // ── Empleados en jornada activa ──────────────────────────
       abiertos.forEach((a, i) => {
+        // FIX: usar horaEntrada (nuevo campo del servidor, más preciso)
+        const horaEntrada = a.horaEntrada || a.hora || '—';
+
+        // Calcular tiempo transcurrido desde la entrada
+        let tiempoTexto = '';
+        if (a.timestamp) {
+          const msTranscurridos = Date.now() - new Date(a.timestamp).getTime();
+          const minutos = Math.floor(msTranscurridos / 60000);
+          if (minutos < 60) {
+            tiempoTexto = ` · ${minutos} min`;
+          } else {
+            const horas = Math.floor(minutos / 60);
+            const mins  = minutos % 60;
+            tiempoTexto = ` · ${horas}h ${mins}min`;
+          }
+        }
+
         filas.push(`
           <div class="registro-item" style="animation-delay:${i * 60}ms">
             <div class="status-icon en-jornada" style="width:44px;height:44px;font-size:18px;">🟢</div>
             <div class="registro-info">
               <div class="registro-tipo">${sanitizar(a.nombre)}</div>
-              <div class="registro-fecha">Entrada: ${sanitizar(a.hora)}</div>
+              <div class="registro-fecha">Entrada: ${sanitizar(horaEntrada)}${tiempoTexto}</div>
             </div>
             <span class="badge badge-entrada">En jornada</span>
           </div>
