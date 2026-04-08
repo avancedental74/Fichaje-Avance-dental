@@ -213,7 +213,7 @@ const Admin = {
     const tbody      = document.getElementById('tablaBody');
     const info       = document.getElementById('tablaInfo');
 
-    tbody.innerHTML = '<tr><td colspan="5"><div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div></td></tr>';
 
     try {
       const params = { accion: 'admin_dia', pinAdmin: AdminState.pinAdmin, fecha };
