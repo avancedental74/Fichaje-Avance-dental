@@ -49,6 +49,17 @@ function mensajeError(err) {
   return 'Error inesperado. Inténtalo de nuevo.';
 }
 
+// Escapar texto antes de interpolarlo en innerHTML
+function sanitizar(str) {
+  if (str == null) return '—';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── API ──────────────────────────────────────────────────────
 
 // apiGet: solo para peticiones SIN credenciales (caché buster público)
@@ -339,27 +350,61 @@ const Admin = {
     lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando...</span></div>';
 
     try {
-      const resp = await apiAdminGet({ accion: 'admin_abiertos', pinAdmin: AdminState.pinAdmin });
-      if (!resp.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
+      // Peticiones paralelas: empleados en jornada + alertas de no-fichaje
+      const [respAbiertos, respAlertas] = await Promise.all([
+        apiAdminGet({ accion: 'admin_abiertos',       pinAdmin: AdminState.pinAdmin }),
+        apiAdminGet({ accion: 'admin_alertas_nofichaje', pinAdmin: AdminState.pinAdmin })
+          .catch(() => ({ ok: false, data: { alertas: [] } }))   // no romper si el endpoint aún no existe
+      ]);
 
-      const { abiertos } = resp.data;
+      if (!respAbiertos.ok) { lista.innerHTML = '<div class="empty-state">Error al cargar.</div>'; return; }
+
+      const abiertos = respAbiertos.data.abiertos || [];
+      const alertas  = (respAlertas.ok ? respAlertas.data.alertas : null) || [];
+
+      // Actualizar el stat badge: empleados en jornada + con retraso
       document.getElementById('statAbiertos').textContent = abiertos.length;
 
-      if (!abiertos.length) {
+      const filas = [];
+
+      // ── Empleados en jornada activa ──────────────────────────
+      abiertos.forEach((a, i) => {
+        filas.push(`
+          <div class="registro-item" style="animation-delay:${i * 60}ms">
+            <div class="status-icon en-jornada" style="width:44px;height:44px;font-size:18px;">🟢</div>
+            <div class="registro-info">
+              <div class="registro-tipo">${sanitizar(a.nombre)}</div>
+              <div class="registro-fecha">Entrada: ${sanitizar(a.hora)}</div>
+            </div>
+            <span class="badge badge-entrada">En jornada</span>
+          </div>
+        `);
+      });
+
+      // ── Empleados con alerta de no-fichaje ───────────────────
+      alertas.forEach((al, i) => {
+        const delay = (abiertos.length + i) * 60;
+        filas.push(`
+          <div class="registro-item" style="animation-delay:${delay}ms; border-left: 3px solid var(--error, #e53e3e);">
+            <div class="status-icon" style="width:44px;height:44px;font-size:18px;">⚠️</div>
+            <div class="registro-info">
+              <div class="registro-tipo">${sanitizar(al.nombre)}</div>
+              <div class="registro-fecha">
+                Turno ${sanitizar(al.turnoEntrada)} —
+                <strong style="color:var(--error, #e53e3e)">sin fichar · ${al.minutosRetraso} min de retraso</strong>
+              </div>
+            </div>
+            <span class="badge badge-error" style="background:var(--error,#e53e3e);color:#fff;white-space:nowrap;">No fichado</span>
+          </div>
+        `);
+      });
+
+      if (!filas.length) {
         lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🟡</div>Ningún empleado en jornada ahora mismo.</div>';
         return;
       }
 
-      lista.innerHTML = abiertos.map((a, i) => `
-        <div class="registro-item" style="animation-delay:${i * 60}ms">
-          <div class="status-icon en-jornada" style="width:44px;height:44px;font-size:18px;">🟢</div>
-          <div class="registro-info">
-            <div class="registro-tipo">${a.nombre}</div>
-            <div class="registro-fecha">Entrada: ${a.hora}</div>
-          </div>
-          <span class="badge badge-entrada">En jornada</span>
-        </div>
-      `).join('');
+      lista.innerHTML = filas.join('');
 
     } catch (err) {
       lista.innerHTML = `<div class="empty-state">${mensajeError(err)}</div>`;

@@ -92,6 +92,9 @@ async function staleWhileRevalidate(req) {
 
 const PBS_TAG = 'geo-fichaje';
 
+// Minutos de tolerancia antes de lanzar alerta por no-fichaje (configurable)
+const ALERTA_RETRASO_MIN = 30;
+
 async function registrarPeriodicSync() {
   try {
     const reg = await self.registration;
@@ -108,9 +111,69 @@ async function registrarPeriodicSync() {
 
 self.addEventListener('periodicsync', event => {
   if (event.tag === PBS_TAG) {
-    event.waitUntil(comprobarGeoYFichar());
+    event.waitUntil(
+      Promise.all([
+        comprobarGeoYFichar(),
+        comprobarAlertaNoFichaje()
+      ])
+    );
   }
 });
+
+// ── Alerta al empleado (y al admin) si lleva más de ALERTA_RETRASO_MIN
+//    minutos sin fichar la entrada estando dentro de la ventana de turno ──
+async function comprobarAlertaNoFichaje() {
+  if (!sw.pin) return;
+  if (!esDiaLaboral()) return;
+
+  // Solo aplica si el empleado está LIBRE (no ha entrado aún hoy)
+  if (sw.estado !== 'LIBRE') return;
+
+  const ahora = minutosDesdeMedianoche(new Date());
+
+  for (const turno of (sw.turnos || [])) {
+    if (!turno.entrada) continue;
+    const minutosEntrada = horaAMinutos(turno.entrada);
+
+    // El umbral empieza a contar desde la hora exacta de entrada
+    const retraso = ahora - minutosEntrada;
+    if (retraso < ALERTA_RETRASO_MIN) continue;
+
+    // Solo lanzar la alerta una vez por ciclo de 30 min para no spamear:
+    // guardamos la última hora de alerta en IDB con clave por turno+día
+    const hoy       = new Date().toISOString().slice(0, 10);
+    const alertaKey = `alerta_nofichaje_${sw.pin}_${hoy}_${turno.entrada}`;
+    const yaAlertado = await leerDeIDB(alertaKey);
+    if (yaAlertado) continue;
+
+    // Marcar como alertado para no repetir hasta el día siguiente
+    await guardarEnIDB(alertaKey, true);
+
+    // 1. Notificación push al empleado
+    await mostrarNotificacion(
+      '⚠️ No has fichado tu entrada',
+      `${sw.nombre} — llevas ${retraso} min de retraso. Toca para fichar.`,
+      'ENTRADA', null, null
+    );
+
+    // 2. Señal al servidor para que el admin lo vea en el panel
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body:    JSON.stringify({
+          accion:           'alerta_no_fichaje',
+          pin:              sw.pin,
+          turnoEntrada:     turno.entrada,
+          minutosRetraso:   retraso,
+          timestampCliente: new Date().toISOString()
+        })
+      });
+    } catch (_) {
+      // El POST puede fallar sin red — la notificación local ya se lanzó
+    }
+  }
+}
 
 // ── Lógica principal del sync periódico ──────────────────────
 async function comprobarGeoYFichar() {
@@ -170,16 +233,29 @@ async function comprobarGeoYFichar() {
   }
 
   if (ventana.tipo === 'ENTRADA' && dentro) {
-    // Está dentro pero no ha fichado la entrada → recordatorio manual
-    await mostrarNotificacion(
-      '🟢 ¿Has olvidado fichar la entrada?',
-      `${sw.nombre} — Estás en el centro. Toca para registrar tu entrada.`,
-      'ENTRADA', lat, lng
-    );
+    // Está dentro del centro en ventana de entrada → fichar directamente (igual que watchPosition)
+    const ok = await ficharDesdeSW(lat, lng, 'Fichaje automático Periodic Sync (ENTRADA)');
+    if (ok) {
+      sw.estado = 'EN_JORNADA';
+      await guardarEstadoEnIDB(sw.estado);
+      await mostrarNotificacion(
+        '🟢 Entrada registrada',
+        `${sw.nombre} — Has fichado la entrada automáticamente ✅`,
+        null, lat, lng
+      );
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach(c => c.postMessage({ tipo: 'FICHAJE_AUTO_OK', accion: 'ENTRADA', hora: horaActual() }));
+    } else {
+      await mostrarNotificacion(
+        '⚠️ No se pudo fichar automáticamente',
+        `${sw.nombre} — toca para fichar manualmente`,
+        'ENTRADA', lat, lng
+      );
+    }
     return;
   }
 
-  // Condiciones cumplidas → fichar automáticamente (salió del centro)
+  // Condiciones cumplidas → fichar automáticamente (SALIDA: empleado salió del centro)
   const ok = await ficharDesdeSW(lat, lng, `Fichaje automático Periodic Sync (${ventana.tipo})`);
   const emoji = ventana.tipo === 'ENTRADA' ? '🟢' : '🔴';
 
