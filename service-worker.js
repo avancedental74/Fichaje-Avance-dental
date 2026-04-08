@@ -1,12 +1,13 @@
 // ============================================================
-//  FICHAJE LABORAL — service-worker.js  v4.0
+//  FICHAJE LABORAL — service-worker.js  v5.0
 //  · Cache First para estáticos / Network Only para API
 //  · Geofencing en background (Android) — puente con app.js
 //  · Notificación push con acción directa de fichaje
-//  · Solo activo Lunes–Viernes
+//  · Periodic Background Sync con ventanas de horario por empleado
+//  · Solo activo Lunes–Viernes, dentro de ventanas de turno
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-v4.0';
+const CACHE_NAME    = 'fichaje-v5.0';
 const STATIC_ASSETS = [
   './index.html', './admin.html', './styles.css',
   './app.js', './admin.js', './manifest.json',
@@ -20,7 +21,8 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBC
 let sw = {
   pin:    null,
   nombre: null,
-  estado: null   // 'LIBRE' | 'EN_JORNADA'
+  estado: null,   // 'LIBRE' | 'EN_JORNADA'
+  turnos: []      // [{ entrada: 'HH:MM', salida: 'HH:MM' }, ...]
 };
 
 // ── INSTALL ──────────────────────────────────────────────────
@@ -41,7 +43,11 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then(() => {
+        self.clients.claim();
+        // Registrar Periodic Background Sync si el navegador lo soporta
+        registrarPeriodicSync();
+      })
   );
 });
 
@@ -78,12 +84,234 @@ async function staleWhileRevalidate(req) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  PERIODIC BACKGROUND SYNC
+//  Chrome Android despierta el SW cada ~15 min si la PWA
+//  está instalada. El SW comprueba si estamos en una ventana
+//  de turno activa y, si es así, verifica GPS y ficha.
+// ════════════════════════════════════════════════════════════
+
+const PBS_TAG = 'geo-fichaje';
+
+async function registrarPeriodicSync() {
+  try {
+    const reg = await self.registration;
+    if (!('periodicSync' in reg)) return;
+    const tags = await reg.periodicSync.getTags();
+    if (!tags.includes(PBS_TAG)) {
+      await reg.periodicSync.register(PBS_TAG, { minInterval: 15 * 60 * 1000 });
+      console.log('[SW] Periodic Background Sync registrado:', PBS_TAG);
+    }
+  } catch (e) {
+    console.warn('[SW] Periodic Sync no disponible:', e.message);
+  }
+}
+
+self.addEventListener('periodicsync', event => {
+  if (event.tag === PBS_TAG) {
+    event.waitUntil(comprobarGeoYFichar());
+  }
+});
+
+// ── Lógica principal del sync periódico ──────────────────────
+async function comprobarGeoYFichar() {
+  // Sin sesión → no hacer nada
+  if (!sw.pin) {
+    await cargarSesionDeIDB();
+    if (!sw.pin) return;
+  }
+
+  if (!esDiaLaboral()) return;
+
+  const ventana = calcularVentanaActual(sw.turnos);
+  if (!ventana) return; // Fuera de ventana de turno → nada
+
+  console.log(`[SW] Ventana activa: tipo=${ventana.tipo}, turno=${ventana.entrada}-${ventana.salida}`);
+
+  // Comprobar si ya se fichó el tipo esperado hoy
+  const necesita = ventana.tipo === 'ENTRADA'
+    ? sw.estado === 'LIBRE'
+    : sw.estado === 'EN_JORNADA';
+
+  if (!necesita) return;
+
+  // Obtener posición GPS
+  let lat = null, lng = null;
+  try {
+    const pos = await obtenerPosicion();
+    lat = pos.coords.latitude;
+    lng = pos.coords.longitude;
+  } catch (_) {
+    // Sin GPS — lanzamos notificación para que el empleado fiche manualmente
+    await mostrarNotificacion(
+      ventana.tipo === 'ENTRADA' ? '🟢 Hora de fichar entrada' : '🔴 Hora de fichar salida',
+      `${sw.nombre} — toca para registrar tu ${ventana.tipo.toLowerCase()}`,
+      ventana.tipo, null, null
+    );
+    return;
+  }
+
+  // Verificar si está dentro del radio del centro
+  const dist   = haversineMetros(lat, lng, GEO_LAT, GEO_LNG);
+  const dentro = dist <= GEO_RADIO;
+
+  if (ventana.tipo === 'ENTRADA' && !dentro) {
+    // Aún no ha llegado — no fichar todavía
+    return;
+  }
+
+  if (ventana.tipo === 'SALIDA' && dentro) {
+    // Aún sigue dentro — no fichar salida todavía
+    return;
+  }
+
+  // Condiciones cumplidas → fichar
+  const ok = await ficharDesdeSW(lat, lng, `Fichaje automático Periodic Sync (${ventana.tipo})`);
+  const emoji = ventana.tipo === 'ENTRADA' ? '🟢' : '🔴';
+
+  if (ok) {
+    sw.estado = ventana.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+    await guardarEstadoEnIDB(sw.estado);
+    await mostrarNotificacion(
+      `${emoji} ${ventana.tipo === 'ENTRADA' ? 'Entrada registrada' : 'Salida registrada'}`,
+      `${sw.nombre} — ${ventana.tipo === 'ENTRADA' ? 'Has fichado la entrada' : 'Has fichado la salida'} automáticamente ✅`,
+      null, lat, lng
+    );
+    // Avisar a la app si está abierta para que refresque la UI
+    const clients = await self.clients.matchAll({ type: 'window' });
+    clients.forEach(c => c.postMessage({
+      tipo: 'FICHAJE_AUTO_OK',
+      accion: ventana.tipo,
+      hora: horaActual()
+    }));
+  } else {
+    await mostrarNotificacion(
+      `⚠️ No se pudo fichar automáticamente`,
+      `${sw.nombre} — toca para fichar manualmente`,
+      ventana.tipo, lat, lng
+    );
+  }
+}
+
+// ── Calcular ventana de turno activa ─────────────────────────
+// Devuelve { tipo: 'ENTRADA'|'SALIDA', entrada, salida } o null si no hay ventana activa.
+// Ventana de ENTRADA: [turnoEntrada - 15min, turnoEntrada + 60min]
+// Ventana de SALIDA:  [turnoSalida  - 60min, turnoSalida  + 60min]
+function calcularVentanaActual(turnos) {
+  if (!turnos || !turnos.length) return null;
+
+  const ahora = minutosDesdeMedianoche(new Date());
+
+  for (const turno of turnos) {
+    if (!turno.entrada || !turno.salida) continue;
+
+    const entrada = horaAMinutos(turno.entrada);
+    const salida  = horaAMinutos(turno.salida);
+
+    // Ventana de entrada: 15 min antes → 60 min después de la hora de entrada
+    if (ahora >= entrada - 15 && ahora <= entrada + 60) {
+      return { tipo: 'ENTRADA', entrada: turno.entrada, salida: turno.salida };
+    }
+
+    // Ventana de salida: 60 min antes → 60 min después de la hora de salida
+    if (ahora >= salida - 60 && ahora <= salida + 60) {
+      return { tipo: 'SALIDA', entrada: turno.entrada, salida: turno.salida };
+    }
+  }
+
+  return null;
+}
+
+// ── Persistencia en IndexedDB ─────────────────────────────────
+// El SW pierde variables cuando se para. IDB garantiza
+// que la sesión sobrevive entre ciclos de vida del SW.
+
+const IDB_NAME    = 'fichaje-sw-db';
+const IDB_STORE   = 'sesion';
+const IDB_VERSION = 1;
+
+function abrirIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = e => {
+      e.target.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+async function guardarEnIDB(key, value) {
+  try {
+    const db  = await abrirIDB();
+    const tx  = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+  } catch (_) {}
+}
+
+async function leerDeIDB(key) {
+  try {
+    const db  = await abrirIDB();
+    const tx  = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    return new Promise((res, rej) => {
+      req.onsuccess = () => res(req.result ?? null);
+      req.onerror   = rej;
+    });
+  } catch (_) { return null; }
+}
+
+async function cargarSesionDeIDB() {
+  const sesion = await leerDeIDB('sesion');
+  if (sesion) {
+    sw.pin    = sesion.pin    || null;
+    sw.nombre = sesion.nombre || null;
+    sw.estado = sesion.estado || null;
+    sw.turnos = sesion.turnos || [];
+  }
+}
+
+async function guardarSesionEnIDB() {
+  await guardarEnIDB('sesion', {
+    pin:    sw.pin,
+    nombre: sw.nombre,
+    estado: sw.estado,
+    turnos: sw.turnos
+  });
+}
+
+async function guardarEstadoEnIDB(estado) {
+  sw.estado = estado;
+  await guardarSesionEnIDB();
+}
+
+// ── Geofencing config (espejado de app.js) ────────────────────
+const GEO_LAT   = 40.5424731;
+const GEO_LNG   = -3.6419531;
+const GEO_RADIO = 150;
+
+function haversineMetros(lat1, lng1, lat2, lng2) {
+  const R    = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a    = Math.sin(dLat/2)**2 +
+               Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+               Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function obtenerPosicion() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 30000
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
 //  MENSAJES DESDE app.js
-//  La app envía eventos de geofencing al SW cuando detecta
-//  un cambio de zona (entra/sale del radio).
-//  El SW se encarga de:
-//    1. Fichar directamente en la API (Android background)
-//    2. Lanzar notificación para que el usuario confirme (iOS)
 // ════════════════════════════════════════════════════════════
 
 self.addEventListener('message', event => {
@@ -91,36 +319,45 @@ self.addEventListener('message', event => {
 
   switch (msg.tipo) {
 
-    // La app se loguea → guardamos sesión en el SW
+    // La app se loguea → guardamos sesión en el SW y en IDB
     case 'SESION':
       sw.pin    = msg.pin;
       sw.nombre = msg.nombre;
       sw.estado = msg.estado;
+      sw.turnos = msg.turnos || [];
+      guardarSesionEnIDB();
+      // Intentar registrar periodic sync si aún no está registrado
+      registrarPeriodicSync();
       break;
 
     // El estado cambió (fichaje manual u otro) → sincronizar
     case 'ESTADO':
       sw.estado = msg.estado;
+      guardarEstadoEnIDB(msg.estado);
       break;
 
     // La app detectó cambio de zona y delega al SW
     case 'GEO_EVENTO':
-      // msg.dentro: true = entró, false = salió
-      // msg.esIOS: true → notificación; false → fichar directo
       manejarGeoEvento(msg);
       break;
 
     // Logout → limpiar sesión
     case 'LOGOUT':
       sw.pin = sw.nombre = sw.estado = null;
+      sw.turnos = [];
+      guardarSesionEnIDB();
       break;
   }
 });
 
-// ── MANEJAR EVENTO DE GEOFENCING ─────────────────────────────
+// ── MANEJAR EVENTO DE GEOFENCING (watchPosition activo) ──────
 async function manejarGeoEvento({ dentro, esIOS, lat, lng }) {
   if (!sw.pin) return;
-  if (!esDiaLaboral()) return;  // ← Solo L–V
+  if (!esDiaLaboral()) return;
+
+  // Comprobar ventana activa antes de actuar
+  const ventana = calcularVentanaActual(sw.turnos);
+  if (!ventana) return; // Fuera de ventana → ignorar
 
   const necesitaEntrada = dentro  && sw.estado === 'LIBRE';
   const necesitaSalida  = !dentro && sw.estado === 'EN_JORNADA';
@@ -134,17 +371,13 @@ async function manejarGeoEvento({ dentro, esIOS, lat, lng }) {
     : `${sw.nombre} — has salido de Avance Dental`;
 
   if (esIOS) {
-    // iOS: mostrar notificación — el empleado toca y la app ficha
     await mostrarNotificacion(titulo, cuerpo, accion, lat, lng);
   } else {
-    // Android: fichar directo desde el SW sin necesidad de abrir la app
-    const ok = await ficharDesdeSW(lat, lng);
+    const ok = await ficharDesdeSW(lat, lng, 'Fichaje automático geofencing (watchPosition)');
     if (ok) {
-      // Notificación informativa (no requiere acción)
       await mostrarNotificacion(titulo, cuerpo + ' ✅ Registrado automáticamente', null, lat, lng);
-      // Actualizar estado local del SW
       sw.estado = accion === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
-      // Avisar a la app si está abierta para que refresque la UI
+      guardarEstadoEnIDB(sw.estado);
       const clients = await self.clients.matchAll({ type: 'window' });
       clients.forEach(c => c.postMessage({ tipo: 'FICHAJE_AUTO_OK', accion, hora: horaActual() }));
     } else {
@@ -153,15 +386,15 @@ async function manejarGeoEvento({ dentro, esIOS, lat, lng }) {
   }
 }
 
-// ── FICHAR DIRECTAMENTE DESDE EL SW (Android) ────────────────
-async function ficharDesdeSW(lat, lng) {
+// ── FICHAR DIRECTAMENTE DESDE EL SW ──────────────────────────
+async function ficharDesdeSW(lat, lng, observaciones) {
   try {
     const body = JSON.stringify({
       accion:           'fichar',
       pin:              sw.pin,
       latitud:          lat || '',
       longitud:         lng || '',
-      observaciones:    'Fichaje automático background (SW)',
+      observaciones:    observaciones || 'Fichaje automático background (SW)',
       timestampCliente: new Date().toISOString(),
       userAgent:        'ServiceWorker'
     });
@@ -184,10 +417,10 @@ async function mostrarNotificacion(titulo, cuerpo, accion, lat, lng) {
     icon:    './icon-192.png',
     badge:   './icon-192.png',
     vibrate: [100, 50, 100],
-    tag:     'fichaje-geo',          // reemplaza la anterior, no apila
+    tag:     'fichaje-geo',
     renotify: true,
     data:    { accion, lat, lng },
-    ...(accion ? {                   // solo pone botón si hay acción pendiente
+    ...(accion ? {
       actions: [{ action: 'fichar', title: '✅ Confirmar' }]
     } : {})
   };
@@ -203,11 +436,9 @@ self.addEventListener('notificationclick', event => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
     if (clients.length > 0) {
-      // App abierta en background → enfocar y mandar mensaje para que fiche
       await clients[0].focus();
       clients[0].postMessage({ tipo: 'FICHAR_DESDE_NOTIFICACION', accion, lat, lng });
     } else {
-      // App cerrada → abrirla con parámetro, al cargar fichará automáticamente
       await self.clients.openWindow(`./index.html?autofichar=${accion || 'auto'}`);
     }
   })());
@@ -215,12 +446,24 @@ self.addEventListener('notificationclick', event => {
 
 // ── HELPERS ───────────────────────────────────────────────────
 
-// Devuelve true si hoy es Lunes (1) a Viernes (5)
 function esDiaLaboral() {
-  const dia = new Date().getDay(); // 0=Dom, 1=Lun, …, 6=Sáb
+  const dia = new Date().getDay();
   return dia >= 1 && dia <= 5;
 }
 
 function horaActual() {
   return new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 }
+
+// Convierte "HH:MM" → minutos desde medianoche
+function horaAMinutos(horaStr) {
+  if (!horaStr) return 0;
+  const [h, m] = horaStr.split(':').map(Number);
+  return h * 60 + m;
+}
+
+// Minutos desde medianoche de una fecha dada
+function minutosDesdeMedianoche(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+

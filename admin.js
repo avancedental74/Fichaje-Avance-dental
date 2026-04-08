@@ -438,7 +438,7 @@ const Admin = {
       btnEdit.textContent = '✏️';
       // Datos pasados por closure — nunca interpolados en HTML
       btnEdit.addEventListener('click', () =>
-        Admin.abrirModalEditarEmpleado(e.id, e.nombre, e.email || '', e.dni || '', e.puesto || '')
+        Admin.abrirModalEditarEmpleado(e.id, e.nombre, e.email || '', e.dni || '', e.puesto || '', e.turno1_entrada || '', e.turno1_salida || '', e.turno2_entrada || '', e.turno2_salida || '')
       );
 
       const btnToggle = document.createElement('button');
@@ -523,6 +523,10 @@ const Admin = {
     document.getElementById('nuevoEmail').value   = '';
     document.getElementById('nuevoDni').value     = '';
     document.getElementById('nuevoPuesto').value  = '';
+    document.getElementById('turno1Entrada').value = '';
+    document.getElementById('turno1Salida').value  = '';
+    document.getElementById('turno2Entrada').value = '';
+    document.getElementById('turno2Salida').value  = '';
     document.getElementById('nuevoEmpError').style.display = 'none';
     document.getElementById('nuevoEmpId').value   = '';
     document.getElementById('nuevoEmpBtn').textContent = 'Crear empleado';
@@ -533,13 +537,17 @@ const Admin = {
     setTimeout(() => document.getElementById('nuevoNombre').focus(), 350);
   },
 
-  abrirModalEditarEmpleado(id, nombre, email, dni, puesto) {
+  abrirModalEditarEmpleado(id, nombre, email, dni, puesto, t1e, t1s, t2e, t2s) {
     document.getElementById('modalEmpTitulo').textContent = '✏️ Editar Empleado';
     document.getElementById('nuevoNombre').value  = nombre;
     document.getElementById('nuevoPin').value     = '';
     document.getElementById('nuevoEmail').value   = email;
     document.getElementById('nuevoDni').value     = dni || '';
     document.getElementById('nuevoPuesto').value  = puesto || '';
+    document.getElementById('turno1Entrada').value = t1e || '';
+    document.getElementById('turno1Salida').value  = t1s || '';
+    document.getElementById('turno2Entrada').value = t2e || '';
+    document.getElementById('turno2Salida').value  = t2s || '';
     document.getElementById('nuevoEmpError').style.display = 'none';
     document.getElementById('nuevoEmpId').value   = id;
     document.getElementById('nuevoEmpBtn').textContent = 'Guardar cambios';
@@ -561,11 +569,15 @@ const Admin = {
   },
 
   async crearEmpleado() {
-    const nombre = document.getElementById('nuevoNombre').value.trim();
-    const pin    = document.getElementById('nuevoPin').value.trim();
-    const email  = document.getElementById('nuevoEmail').value.trim();
-    const dni    = document.getElementById('nuevoDni').value.trim().toUpperCase();
-    const puesto = document.getElementById('nuevoPuesto').value.trim();
+    const nombre        = document.getElementById('nuevoNombre').value.trim();
+    const pin           = document.getElementById('nuevoPin').value.trim();
+    const email         = document.getElementById('nuevoEmail').value.trim();
+    const dni           = document.getElementById('nuevoDni').value.trim().toUpperCase();
+    const puesto        = document.getElementById('nuevoPuesto').value.trim();
+    const turno1Entrada = document.getElementById('turno1Entrada').value.trim();
+    const turno1Salida  = document.getElementById('turno1Salida').value.trim();
+    const turno2Entrada = document.getElementById('turno2Entrada').value.trim();
+    const turno2Salida  = document.getElementById('turno2Salida').value.trim();
     const id     = document.getElementById('nuevoEmpId').value.trim();
     const error  = document.getElementById('nuevoEmpError');
     const btn    = document.getElementById('nuevoEmpBtn');
@@ -620,6 +632,25 @@ const Admin = {
       return;
     }
 
+    // ── VALIDACIÓN DE TURNOS ──────────────────────────────────
+    // Si se rellena una parte del turno, la otra también es obligatoria
+    if ((turno1Entrada && !turno1Salida) || (!turno1Entrada && turno1Salida)) {
+      error.textContent   = 'Turno 1: debes indicar tanto la entrada como la salida.';
+      error.style.display = 'block';
+      return;
+    }
+    if ((turno2Entrada && !turno2Salida) || (!turno2Entrada && turno2Salida)) {
+      error.textContent   = 'Turno 2: debes indicar tanto la entrada como la salida.';
+      error.style.display = 'block';
+      return;
+    }
+    // Turno 2 requiere Turno 1
+    if ((turno2Entrada || turno2Salida) && !turno1Entrada) {
+      error.textContent   = 'Define el Turno 1 antes de añadir el Turno 2.';
+      error.style.display = 'block';
+      return;
+    }
+
     btn.disabled        = true;
     btn.innerHTML       = '<span class="loader"></span> Guardando...';
     error.style.display = 'none';
@@ -631,7 +662,11 @@ const Admin = {
         nombre,
         email,
         dni,
-        puesto
+        puesto,
+        turno1_entrada: turno1Entrada,
+        turno1_salida:  turno1Salida,
+        turno2_entrada: turno2Entrada,
+        turno2_salida:  turno2Salida
       };
       if (pin)        body.pin        = pin;
       if (modoEditar) body.idEmpleado = id;

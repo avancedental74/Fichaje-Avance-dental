@@ -373,6 +373,38 @@
              placeholder="Ej: Odontólogo, Auxiliar...">
     </div>
 
+    <!-- ── TURNOS ───────────────────────────────────────────── -->
+    <div style="margin-bottom:8px; margin-top:4px;">
+      <span class="input-label" style="display:block; margin-bottom:10px;">
+        🕐 Horario laboral (L–V)
+      </span>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:center;">
+        <div>
+          <label class="input-label" for="turno1Entrada" style="font-size:11px; margin-bottom:4px;">Turno 1 — Entrada</label>
+          <input type="time" class="input-field" id="turno1Entrada" style="text-align:center;">
+        </div>
+        <div>
+          <label class="input-label" for="turno1Salida" style="font-size:11px; margin-bottom:4px;">Turno 1 — Salida</label>
+          <input type="time" class="input-field" id="turno1Salida" style="text-align:center;">
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:8px;">
+        Turno 2 (opcional — jornada partida)
+      </span>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:center;">
+        <div>
+          <label class="input-label" for="turno2Entrada" style="font-size:11px; margin-bottom:4px;">Turno 2 — Entrada</label>
+          <input type="time" class="input-field" id="turno2Entrada" style="text-align:center;">
+        </div>
+        <div>
+          <label class="input-label" for="turno2Salida" style="font-size:11px; margin-bottom:4px;">Turno 2 — Salida</label>
+          <input type="time" class="input-field" id="turno2Salida" style="text-align:center;">
+        </div>
+      </div>
+    </div>
+
     <!-- PIN creado — visible solo después de crear -->
     <div id="pinVisualWrapper" style="display:none; margin-bottom:16px;">
       <div style="background:var(--entrada-dim);

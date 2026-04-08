@@ -23,6 +23,7 @@ const State = {
   pin:          null,
   nombre:       null,
   estado:       null,   // LIBRE | EN_JORNADA
+  turnos:       [],     // [{ entrada: 'HH:MM', salida: 'HH:MM' }, ...]
   relojTimer:   null,
   pollingTimer: null,
   dentroDelCentro: null  // null = desconocido, true/false cuando tengamos GPS
@@ -102,6 +103,23 @@ async function pedirPermisoNotificaciones() {
   return result === 'granted';
 }
 
+// Registrar Periodic Background Sync (solo Chrome Android, PWA instalada)
+async function registrarPeriodicSync() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (!('periodicSync' in reg)) return;
+    // Requiere permiso de notificaciones
+    if (Notification.permission !== 'granted') return;
+    const tags = await reg.periodicSync.getTags();
+    if (!tags.includes('geo-fichaje')) {
+      await reg.periodicSync.register('geo-fichaje', { minInterval: 15 * 60 * 1000 });
+      console.log('[App] Periodic Background Sync registrado');
+    }
+  } catch (e) {
+    console.warn('[App] Periodic Sync no disponible:', e.message);
+  }
+}
+
 // Enviar estado actual al Service Worker para que lo tenga en memoria
 function sincronizarSW(extraData = {}) {
   if (!navigator.serviceWorker?.controller) return;
@@ -110,6 +128,7 @@ function sincronizarSW(extraData = {}) {
     pin:    State.pin,
     nombre: State.nombre,
     estado: State.estado,
+    turnos: State.turnos || [],
     ...extraData
   });
 }
@@ -133,6 +152,9 @@ function iniciarGeofencing() {
 
   // Pedir permiso de notificaciones (no bloqueante)
   pedirPermisoNotificaciones();
+
+  // Intentar registrar Periodic Background Sync (Chrome Android)
+  registrarPeriodicSync();
 
   // Sincronizar sesión con el SW
   sincronizarSW();
@@ -379,6 +401,7 @@ const App = {
 
       State.pin    = pin;
       State.nombre = resp.data.nombre;
+      State.turnos = resp.data.turnos || [];
       sessionStorage.setItem('fichaje_pin', pin);
 
       this.renderEstado(resp.data);
@@ -424,6 +447,7 @@ const App = {
         return;
       }
       State.nombre = resp.data.nombre;
+      State.turnos = resp.data.turnos || [];
       this.renderEstado(resp.data);
       this.iniciarReloj();
       this.cargarHistorial();

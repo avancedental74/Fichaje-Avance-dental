@@ -51,7 +51,8 @@ function getSheet(nombre) {
 function inicializarHoja(hoja, nombre) {
   const headers = {
     [CONFIG.HOJAS.EMPLEADOS]: [
-      'ID','Nombre','PIN','Activo','FechaAlta','Email','DNI','Puesto'
+      'ID','Nombre','PIN','Activo','FechaAlta','Email','DNI','Puesto',
+      'Turno1_Entrada','Turno1_Salida','Turno2_Entrada','Turno2_Salida'
     ],
     [CONFIG.HOJAS.REGISTROS]: [
       'ID_Registro','ID_Empleado','Nombre_Empleado','Tipo',
@@ -150,9 +151,12 @@ function buscarEmpleadoPorPIN(pin) {
   const hoja  = getSheet(CONFIG.HOJAS.EMPLEADOS);
   const datos = hoja.getDataRange().getValues();
   for (let i = 1; i < datos.length; i++) {
-    const [id, nombre, pinGuardado, activo] = datos[i];
+    const [id, nombre, pinGuardado, activo,,,,, t1e, t1s, t2e, t2s] = datos[i];
     if (String(pinGuardado).trim() === String(pin).trim() && activo === true) {
-      return { fila: i + 1, id, nombre, activo };
+      const turnos = [];
+      if (t1e && t1s) turnos.push({ entrada: t1e, salida: t1s });
+      if (t2e && t2s) turnos.push({ entrada: t2e, salida: t2s });
+      return { fila: i + 1, id, nombre, activo, turnos };
     }
   }
   return null;
@@ -258,6 +262,7 @@ function accionEstado(params) {
   return respOk({
     nombre: empleado.nombre,
     estado,
+    turnos: empleado.turnos,
     ultimaAccion: ultimoReg ? {
       tipo:      ultimoReg.tipo,
       hora:      ultimoReg.hora,
@@ -363,14 +368,19 @@ function accionAdminEmpleados(params) {
     fechaAlta: fila[4] ? formatFecha(new Date(fila[4])) : '',
     email:     fila[5] || '',
     dni:       fila[6] || '',
-    puesto:    fila[7] || ''
+    puesto:    fila[7] || '',
+    turno1_entrada: fila[8]  || '',
+    turno1_salida:  fila[9]  || '',
+    turno2_entrada: fila[10] || '',
+    turno2_salida:  fila[11] || ''
   }));
 
   return respOk({ empleados });
 }
 
 function accionNuevoEmpleado(body) {
-  const { pinAdmin, nombre, pin, email, dni, puesto } = body;
+  const { pinAdmin, nombre, pin, email, dni, puesto,
+          turno1_entrada, turno1_salida, turno2_entrada, turno2_salida } = body;
   if (!verificarAdmin(pinAdmin)) return respErr('Acceso denegado');
   if (!nombre || !pin)           return respErr('Nombre y PIN son obligatorios');
   if (String(pin).length !== 4)  return respErr('El PIN debe tener 4 dígitos');
@@ -385,14 +395,19 @@ function accionNuevoEmpleado(body) {
   }
 
   const id = 'EMP' + String(datos.length).padStart(3, '0');
-  hoja.appendRow([id, nombre, pin, true, new Date(), email || '', dni || '', puesto || '']);
+  hoja.appendRow([
+    id, nombre, pin, true, new Date(), email || '', dni || '', puesto || '',
+    turno1_entrada || '', turno1_salida || '',
+    turno2_entrada || '', turno2_salida || ''
+  ]);
 
   auditLog('NUEVO_EMPLEADO', 'ADMIN', { id, nombre, dni, puesto }, '');
   return respOk({ id, nombre, mensaje: 'Empleado creado correctamente' });
 }
 
 function accionEditarEmpleado(body) {
-  const { pinAdmin, idEmpleado, nombre, pin, email, dni, puesto } = body;
+  const { pinAdmin, idEmpleado, nombre, pin, email, dni, puesto,
+          turno1_entrada, turno1_salida, turno2_entrada, turno2_salida } = body;
   if (!verificarAdmin(pinAdmin)) return respErr('Acceso denegado');
   if (!idEmpleado || !nombre)    return respErr('ID y nombre son obligatorios');
 
@@ -408,6 +423,11 @@ function accionEditarEmpleado(body) {
       if (pin && String(pin).length === 4) {
         hoja.getRange(i + 1, 3).setValue(pin);
       }
+      // Turnos (columnas 9–12)
+      hoja.getRange(i + 1, 9).setValue(turno1_entrada || '');
+      hoja.getRange(i + 1, 10).setValue(turno1_salida  || '');
+      hoja.getRange(i + 1, 11).setValue(turno2_entrada || '');
+      hoja.getRange(i + 1, 12).setValue(turno2_salida  || '');
       auditLog('EDITAR_EMPLEADO', 'ADMIN', { idEmpleado, nombre }, '');
       return respOk({ id: idEmpleado, nombre, mensaje: 'Empleado actualizado' });
     }
@@ -517,7 +537,7 @@ function setupInicial() {
 
   // Empleado de prueba — bórralo después de probar
   const hEmpleados = ss.getSheetByName('Empleados');
-  hEmpleados.appendRow(['EMP001', 'Empleado Demo', '1111', true, new Date(), 'demo@avancedental.com']);
+  hEmpleados.appendRow(['EMP001', 'Empleado Demo', '1111', true, new Date(), 'demo@avancedental.com', '00000000T', 'Auxiliar', '09:00', '14:00', '16:00', '20:00']);
 
   Logger.log('✅ Setup completado. Empleado demo PIN: 1111 | Admin PIN: ' + CONFIG.PIN_ADMIN);
 }
