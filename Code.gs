@@ -1,6 +1,6 @@
 // ============================================================
 //  FICHAJE LABORAL — Code.gs (Google Apps Script)
-//  Versión: 1.0 MVP — Avance Dental
+//  Versión: 1.2 — Fix estado real fichado + panel admin en tiempo real
 // ============================================================
 
 // ── CONFIGURACIÓN GLOBAL ────────────────────────────────────
@@ -12,7 +12,8 @@ const CONFIG = {
   HOJAS: {
     EMPLEADOS: 'Empleados',
     REGISTROS: 'Registros',
-    AUDITORIA: 'Auditoria'
+    AUDITORIA: 'Auditoria',
+    ALERTAS:   'Alertas'
   }
 };
 
@@ -61,6 +62,10 @@ function inicializarHoja(hoja, nombre) {
     ],
     [CONFIG.HOJAS.AUDITORIA]: [
       'Timestamp','Accion','ID_Empleado','Detalle','IP'
+    ],
+    [CONFIG.HOJAS.ALERTAS]: [
+      'ID_Alerta','ID_Empleado','Nombre_Empleado','Turno_Entrada',
+      'Minutos_Retraso','Timestamp_Cliente','Timestamp_Servidor','Resuelta'
     ]
   };
   if (headers[nombre]) {
@@ -98,9 +103,6 @@ function doGet(e) {
     switch (accion) {
       case 'estado':          return jsonResponse(accionEstado(params));
       case 'historial':       return jsonResponse(accionHistorial(params));
-      case 'admin_dia':       return jsonResponse(accionAdminDia(params));
-      case 'admin_abiertos':  return jsonResponse(accionAdminAbiertos(params));
-      case 'admin_empleados': return jsonResponse(accionAdminEmpleados(params));
       case 'check_setup':     return jsonResponse(accionCheckSetup());
       case 'ping':            return jsonResponse(respOk({ msg: 'OK', empresa: CONFIG.NOMBRE_EMPRESA }));
       default:                return jsonResponse(respErr('Acción no reconocida'));
@@ -111,6 +113,10 @@ function doGet(e) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+//  FIX: Las acciones de admin se reciben siempre por POST
+//  (el pinAdmin viaja en el body, nunca en la URL).
+// ─────────────────────────────────────────────────────────────
 function doPost(e) {
   let body = {};
   try {
@@ -124,12 +130,24 @@ function doPost(e) {
 
   try {
     switch (accion) {
-      case 'fichar':                return jsonResponse(accionFichar(body, ip));
-      case 'admin_nuevo_empleado':  return jsonResponse(accionNuevoEmpleado(body));
-      case 'admin_editar_empleado': return jsonResponse(accionEditarEmpleado(body));
-      case 'admin_toggle_empleado': return jsonResponse(accionToggleEmpleado(body));
-      case 'bootstrap_admin':       return jsonResponse(respErr('No necesario en esta versión'));
-      default:                      return jsonResponse(respErr('Acción POST no reconocida'));
+      // ── Fichaje de empleados ───────────────────────────────
+      case 'fichar':                  return jsonResponse(accionFichar(body, ip));
+      case 'alerta_no_fichaje':       return jsonResponse(accionAlertaNoFichaje(body, ip));
+
+      // ── Acciones de lectura admin (pinAdmin en body POST) ──
+      case 'admin_empleados':         return jsonResponse(accionAdminEmpleados(body));
+      case 'admin_dia':               return jsonResponse(accionAdminDia(body));
+      case 'admin_abiertos':          return jsonResponse(accionAdminAbiertos(body));
+      case 'admin_alertas_nofichaje': return jsonResponse(accionAdminAlertasNoFichaje(body));
+
+      // ── Acciones de escritura admin ────────────────────────
+      case 'admin_resolver_alerta':   return jsonResponse(accionResolverAlerta(body));
+      case 'admin_nuevo_empleado':    return jsonResponse(accionNuevoEmpleado(body));
+      case 'admin_editar_empleado':   return jsonResponse(accionEditarEmpleado(body));
+      case 'admin_toggle_empleado':   return jsonResponse(accionToggleEmpleado(body));
+
+      case 'bootstrap_admin':         return jsonResponse(respErr('No necesario en esta versión'));
+      default:                        return jsonResponse(respErr('Acción POST no reconocida'));
     }
   } catch(err) {
     console.error('doPost error:', err.message);
@@ -138,7 +156,7 @@ function doPost(e) {
   }
 }
 
-// ── CHECK SETUP (para que admin.js no muestre pantalla de bootstrap) ──
+// ── CHECK SETUP ───────────────────────────────────────────────
 function accionCheckSetup() {
   return respOk({ adminExists: true });
 }
@@ -233,8 +251,13 @@ function accionFichar(body, ip) {
 
   auditLog('FICHAJE', empleado.id, { tipo, idReg, fecha: hoyStr }, ip);
 
+  // FIX: Devolvemos también el nuevo estado esperado para que app.js
+  // pueda actualizar el botón sin necesidad de hacer otra consulta
+  const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+
   return respOk({
     tipo,
+    nuevoEstado,         // ← NUEVO: app.js lo usa para actualizar el botón al instante
     nombre:     empleado.nombre,
     timestamp:  ahora.toISOString(),
     fecha:      hoyStr,
@@ -255,9 +278,15 @@ function accionEstado(params) {
   const ultimoReg = getUltimoRegistroDia(empleado.id, hoyStr);
   const histHoy   = getRegistrosDia(empleado.id, hoyStr);
 
-  const estado = !ultimoReg          ? 'LIBRE' :
-                 ultimoReg.tipo === 'ENTRADA' ? 'EN_JORNADA' :
-                 ultimoReg.tipo === 'SALIDA'  ? 'JORNADA_CERRADA' : 'DESCONOCIDO';
+  // FIX: JORNADA_CERRADA solo cuando el último tipo del día es SALIDA.
+  // Si no hay registro hoy → LIBRE (puede fichar entrada).
+  // Si el último es ENTRADA → EN_JORNADA (debe fichar salida).
+  // Si el último es SALIDA  → LIBRE (puede fichar otra entrada, jornada partida).
+  const estado = !ultimoReg
+    ? 'LIBRE'
+    : ultimoReg.tipo === 'ENTRADA'
+      ? 'EN_JORNADA'
+      : 'LIBRE';   // ← FIX: era 'JORNADA_CERRADA', ahora es LIBRE para permitir jornada partida y que el botón sea correcto
 
   return respOk({
     nombre: empleado.nombre,
@@ -326,6 +355,20 @@ function accionAdminDia(params) {
   return respOk({ fecha: fechaBuscar, total: registros.length, registros });
 }
 
+// ──────────────────────────────────────────────────────────────
+//  FIX PRINCIPAL — accionAdminAbiertos
+//
+//  BUG ANTERIOR: mapaUltimo[reg[1]] se sobreescribía sin comparar
+//  timestamps, por lo que si las filas no estaban en orden
+//  cronológico perfecto el "último" podía ser incorrecto.
+//  El resultado: empleados aparecían como "en jornada" cuando ya
+//  habían fichado la salida, o viceversa.
+//
+//  FIX: comparar el Timestamp_Servidor (columna 4) antes de
+//  sobreescribir. Solo se queda el registro más reciente real.
+//  Además se añade horaEntrada para mostrar en el panel cuándo
+//  entró cada empleado.
+// ──────────────────────────────────────────────────────────────
 function accionAdminAbiertos(params) {
   const { pinAdmin } = params;
   if (!verificarAdmin(pinAdmin)) return respErr('Acceso denegado');
@@ -334,22 +377,52 @@ function accionAdminAbiertos(params) {
   const hoja   = getSheet(CONFIG.HOJAS.REGISTROS);
   const datos  = hoja.getDataRange().getValues();
 
+  // mapaUltimo: { idEmpleado → { tipo, nombre, hora, timestamp (Date) } }
   const mapaUltimo = {};
+
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[6] === hoyStr) {
-      mapaUltimo[reg[1]] = {
+    if (reg[6] !== hoyStr) continue;           // solo registros de hoy
+
+    const idEmp    = reg[1];
+    const tsActual = reg[4] ? new Date(reg[4]) : new Date(0);
+
+    // FIX: solo sobreescribir si este registro es MÁS RECIENTE que el guardado
+    if (!mapaUltimo[idEmp] || tsActual > mapaUltimo[idEmp].timestamp) {
+      mapaUltimo[idEmp] = {
         tipo:      reg[3],
         nombre:    reg[2],
         hora:      formatHora(reg[4]),
-        timestamp: reg[4]
+        timestamp: tsActual
       };
+    }
+  }
+
+  // Para los que están EN_JORNADA, buscamos también la hora de su última ENTRADA
+  // (para mostrar "lleva X horas trabajando" en el panel)
+  const horaEntradaPor = {};
+  for (let i = 1; i < datos.length; i++) {
+    const reg = datos[i];
+    if (reg[6] !== hoyStr || reg[3] !== 'ENTRADA') continue;
+    const idEmp = reg[1];
+    const ts    = reg[4] ? new Date(reg[4]) : new Date(0);
+    if (!horaEntradaPor[idEmp] || ts > horaEntradaPor[idEmp].ts) {
+      horaEntradaPor[idEmp] = { hora: formatHora(reg[4]), ts };
     }
   }
 
   const abiertos = Object.entries(mapaUltimo)
     .filter(([_, r]) => r.tipo === 'ENTRADA')
-    .map(([id, r]) => ({ idEmpleado: id, ...r }));
+    .map(([id, r]) => ({
+      idEmpleado:   id,
+      nombre:       r.nombre,
+      horaEntrada:  horaEntradaPor[id]?.hora || r.hora,   // hora real de entrada
+      horaUltReg:   r.hora,
+      timestamp:    r.timestamp.toISOString()
+    }));
+
+  // Ordenar por hora de entrada ascendente (quien llegó antes, primero)
+  abiertos.sort((a, b) => a.horaEntrada.localeCompare(b.horaEntrada));
 
   return respOk({ fecha: hoyStr, abiertos });
 }
@@ -454,9 +527,108 @@ function accionToggleEmpleado(body) {
 }
 
 // ============================================================
+//  ALERTAS DE NO-FICHAJE
+// ============================================================
+
+// POST accion:'alerta_no_fichaje' — llamado desde el SW del empleado
+function accionAlertaNoFichaje(body, ip) {
+  const { pin, turnoEntrada, minutosRetraso, timestampCliente } = body;
+  if (!pin) return respErr('PIN requerido');
+
+  const empleado = buscarEmpleadoPorPIN(pin);
+  if (!empleado) return respErr('PIN incorrecto o empleado inactivo');
+
+  const hoyStr = formatFecha(new Date());
+
+  // Idempotencia: una sola alerta por empleado + turno + día
+  const hoja  = getSheet(CONFIG.HOJAS.ALERTAS);
+  const datos = hoja.getDataRange().getValues();
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][1] === empleado.id &&
+        datos[i][3] === turnoEntrada &&
+        formatFecha(new Date(datos[i][6])) === hoyStr) {
+      // Ya existe → actualizar minutos de retraso pero no duplicar
+      hoja.getRange(i + 1, 5).setValue(minutosRetraso || datos[i][4]);
+      return respOk({ mensaje: 'Alerta actualizada', id: datos[i][0] });
+    }
+  }
+
+  // Nueva alerta
+  const idAlerta = generarID();
+  hoja.appendRow([
+    idAlerta,
+    empleado.id,
+    empleado.nombre,
+    turnoEntrada   || '',
+    minutosRetraso || 0,
+    timestampCliente ? new Date(timestampCliente) : new Date(),
+    new Date(),    // Timestamp_Servidor
+    false          // Resuelta
+  ]);
+
+  auditLog('ALERTA_NO_FICHAJE', empleado.id,
+    { turnoEntrada, minutosRetraso, fecha: hoyStr }, ip);
+
+  return respOk({ mensaje: 'Alerta registrada', id: idAlerta });
+}
+
+// GET/POST accion:'admin_alertas_nofichaje' — panel admin
+function accionAdminAlertasNoFichaje(params) {
+  const { pinAdmin } = params;
+  if (!verificarAdmin(pinAdmin)) return respErr('Acceso denegado');
+
+  const hoyStr = formatFecha(new Date());
+  const hoja   = getSheet(CONFIG.HOJAS.ALERTAS);
+  const datos  = hoja.getDataRange().getValues();
+
+  const alertas = [];
+  for (let i = 1; i < datos.length; i++) {
+    const fila = datos[i];
+    // Solo alertas de hoy no resueltas
+    if (formatFecha(new Date(fila[6])) === hoyStr && !fila[7]) {
+      alertas.push({
+        idAlerta:          fila[0],
+        idEmpleado:        fila[1],
+        nombre:            fila[2],
+        turnoEntrada:      fila[3],
+        minutosRetraso:    fila[4],
+        timestampCliente:  fila[5] ? new Date(fila[5]).toISOString() : '',
+        timestampServidor: fila[6] ? new Date(fila[6]).toISOString() : ''
+      });
+    }
+  }
+
+  // Ordenar por más retraso primero
+  alertas.sort((a, b) => b.minutosRetraso - a.minutosRetraso);
+
+  return respOk({ fecha: hoyStr, alertas });
+}
+
+// POST accion:'admin_resolver_alerta' — marcar como resuelta desde el panel
+function accionResolverAlerta(body) {
+  const { pinAdmin, idAlerta } = body;
+  if (!verificarAdmin(pinAdmin)) return respErr('Acceso denegado');
+  if (!idAlerta)                 return respErr('ID de alerta requerido');
+
+  const hoja  = getSheet(CONFIG.HOJAS.ALERTAS);
+  const datos = hoja.getDataRange().getValues();
+
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][0] === idAlerta) {
+      hoja.getRange(i + 1, 8).setValue(true);  // columna Resuelta
+      auditLog('ALERTA_RESUELTA', 'ADMIN', { idAlerta }, '');
+      return respOk({ idAlerta, resuelta: true });
+    }
+  }
+  return respErr('Alerta no encontrada');
+}
+
+// ============================================================
 //  HELPERS DE DATOS
 // ============================================================
 
+// FIX: getUltimoRegistroDia ya comparaba timestamps correctamente.
+// Se mantiene igual, solo se añade sesionID al objeto devuelto.
 function getUltimoRegistroDia(idEmpleado, fechaStr) {
   const hoja  = getSheet(CONFIG.HOJAS.REGISTROS);
   const datos = hoja.getDataRange().getValues();
@@ -465,7 +637,8 @@ function getUltimoRegistroDia(idEmpleado, fechaStr) {
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
     if (reg[1] === idEmpleado && reg[6] === fechaStr) {
-      if (!ultimo || new Date(reg[4]) > new Date(ultimo.timestamp)) {
+      const ts = reg[4] ? new Date(reg[4]) : new Date(0);
+      if (!ultimo || ts > new Date(ultimo.timestamp)) {
         ultimo = {
           tipo:      reg[3],
           timestamp: reg[4],
@@ -528,7 +701,7 @@ function formatHora(date) {
 function setupInicial() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
 
-  ['Empleados', 'Registros', 'Auditoria'].forEach(nombre => {
+  ['Empleados', 'Registros', 'Auditoria', 'Alertas'].forEach(nombre => {
     if (!ss.getSheetByName(nombre)) {
       const h = ss.insertSheet(nombre);
       inicializarHoja(h, nombre);
