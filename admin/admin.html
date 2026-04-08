@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#09090f" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#09090f">
+  <meta name="description" content="Panel de administración — Fichaje Laboral">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Admin — Fichaje Laboral</title>
+
+  <!-- PWA: iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Admin Fichaje">
+
+  <!-- PWA iconos iOS -->
+  <link rel="apple-touch-icon" href="../admin-icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="../admin-icon-192.png">
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest-admin.json">
+  <link rel="icon" type="image/png" href="../admin-icon-192.png">
+
+  <!-- Fuentes + CSS -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Fuente Sora cargada aquí (no en @import del CSS) para evitar bloqueo de renderizado -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="preload" href="admin.js" as="script">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ── HEADER ────────────────────────────────────────────── -->
+  <header class="app-header" id="adminHeader">
+    <div class="app-logo">
+      <div class="app-logo-icon"
+           style="background:linear-gradient(135deg,var(--admin),#7c5bff)"
+           role="img" aria-label="Admin">🛡</div>
+      <span class="app-logo-text">Panel Admin</span>
+    </div>
+    <button class="header-action" id="adminInstallBtn"
+            onclick="installPWA()" aria-label="Instalar aplicación">
+      📲 Instalar app
+    </button>
+    <button class="header-action" id="adminLogoutBtn" style="display:none"
+            onclick="Admin.logout()" aria-label="Cerrar sesión de administrador">
+      Cerrar sesión
+    </button>
+  </header>
+
+  <!-- ── MODAL INSTRUCCIONES INSTALACIÓN MANUAL ─────────────── -->
+  <div id="modalInstall" style="display:none; position:fixed; inset:0; z-index:9999;
+       background:rgba(0,0,0,0.82); padding:16px; align-items:flex-end; overflow-y:auto;"
+       onclick="document.getElementById('modalInstall').style.display='none'">
+    <div onclick="event.stopPropagation()"
+         style="background:var(--surface); border-radius:24px; padding:28px 24px;
+                width:100%; max-width:440px; margin:0 auto;">
+
+      <!-- Cabecera -->
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="font-size:36px; margin-bottom:10px;">📲</div>
+        <h2 style="font-size:19px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+          Instalar app de Trabajador
+        </h2>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+          Tú eres admin y trabajador. Puedes tener <strong style="color:var(--text-primary)">las dos apps instaladas</strong>
+          a la vez con iconos distintos.
+        </p>
+      </div>
+
+      <!-- Aviso importante -->
+      <div style="background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3);
+                  border-radius:14px; padding:14px 16px; margin-bottom:20px; display:flex; gap:10px; align-items:flex-start;">
+        <span style="font-size:18px; flex-shrink:0; margin-top:1px;">⚠️</span>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin:0;">
+          Como ya tienes la app Admin instalada, el navegador <strong style="color:var(--text-primary)">no mostrará el botón automático</strong>
+          para instalar la de Trabajador. Sigue los pasos manuales:
+        </p>
+      </div>
+
+      <!-- Steps Android -->
+      <div id="installStepsAndroid" style="display:none;">
+        <p style="font-size:12px; font-weight:600; color:var(--text-muted); letter-spacing:0.08em;
+                  text-transform:uppercase; margin-bottom:12px;">Android — Chrome</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">1️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Abre <strong style="color:var(--text-primary)">Chrome</strong> (no uses la app Admin que tienes instalada) y
+              navega a la URL de la app de fichaje: <strong style="color:var(--text-primary)">avancedental74.github.io/Fichaje-Avance-dental</strong>
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">2️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Toca el menú <strong style="color:var(--text-primary)">⋮</strong> (tres puntos, arriba a la derecha)
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">3️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Selecciona <strong style="color:var(--text-primary)">«Añadir a pantalla de inicio»</strong>
+              o <strong style="color:var(--text-primary)">«Instalar aplicación»</strong>
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">4️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Confirma tocando <strong style="color:var(--text-primary)">«Instalar»</strong>
+              — aparecerá en tu pantalla de inicio con el icono del reloj 🕐
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Steps iOS -->
+      <div id="installStepsIOS" style="display:none;">
+        <p style="font-size:12px; font-weight:600; color:var(--text-muted); letter-spacing:0.08em;
+                  text-transform:uppercase; margin-bottom:12px;">iPhone / iPad — Safari</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">1️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Abre <strong style="color:var(--text-primary)">Safari</strong> (no desde la app Admin instalada) y
+              navega a <strong style="color:var(--text-primary)">avancedental74.github.io/Fichaje-Avance-dental</strong>
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">2️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Toca el botón de compartir <strong style="color:var(--text-primary)">⬆</strong> (abajo en el centro de Safari)
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">3️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Desplázate y toca <strong style="color:var(--text-primary)">«Añadir a pantalla de inicio»</strong>
+            </span>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start; background:var(--surface-2);
+                      border-radius:12px; padding:12px;">
+            <span style="font-size:18px; flex-shrink:0;">4️⃣</span>
+            <span style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+              Toca <strong style="color:var(--text-primary)">«Añadir»</strong> arriba a la derecha
+              — verás el icono del reloj 🕐 en tu pantalla de inicio
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resultado esperado -->
+      <div style="margin-top:18px; padding:14px 16px; background:rgba(0,214,143,0.08);
+                  border:1px solid rgba(0,214,143,0.2); border-radius:14px; text-align:center;">
+        <div style="font-size:22px; margin-bottom:6px;">✅</div>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.5; margin:0;">
+          Al terminar tendrás <strong style="color:var(--text-primary)">dos iconos separados</strong>
+          en tu móvil: el escudo 🛡 para Admin y el reloj 🕐 para Fichaje.
+          Son apps completamente independientes.
+        </p>
+      </div>
+
+      <button class="btn btn-primary btn-full mt-3"
+              onclick="document.getElementById('modalInstall').style.display='none'"
+              style="font-size:16px;">
+        Entendido
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 0: SETUP — PRIMER ADMIN
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page" id="page-setup" role="main">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;
+                justify-content:center; padding:32px 24px; overflow-y:auto;
+                -webkit-overflow-scrolling:touch;">
+
+      <div style="font-size:54px; margin-bottom:16px;" aria-hidden="true">⚙️</div>
+      <h1 style="font-size:22px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+        Configuración inicial
+      </h1>
+      <p style="color:var(--text-secondary); font-size:14px; margin-bottom:6px; text-align:center;">
+        No existe ningún administrador. Crea el primero para activar el sistema.
+      </p>
+      <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:28px;">
+        Necesitarás la <strong style="color:var(--warning)">clave de instalación</strong>
+        definida en el backend (BOOTSTRAP_SECRET).
+      </p>
+
+      <div style="width:100%; max-width:360px;">
+
+        <div class="input-group mb-2">
+          <label class="input-label" for="setupSecret">Clave de instalación</label>
+          <input type="password" class="input-field" id="setupSecret"
+                 placeholder="Clave definida en Code.gs"
+                 autocomplete="off" autocorrect="off" autocapitalize="off">
+        </div>
+
+        <div class="input-group mb-2">
+          <label class="input-label" for="setupNombre">Tu nombre</label>
+          <input type="text" class="input-field" id="setupNombre"
+                 placeholder="Ej: Carlos García"
+                 autocomplete="name">
+        </div>
+
+        <div class="input-group mb-2">
+          <label class="input-label" for="setupPin">PIN de administrador (4–6 dígitos)</label>
+          <input type="password" inputmode="numeric" maxlength="6"
+                 class="input-field pin-input" id="setupPin"
+                 placeholder="• • • •"
+                 autocomplete="new-password">
+          <span style="font-size:12px; color:var(--text-muted);">
+            Recuérdalo bien. No hay recuperación automática.
+          </span>
+        </div>
+
+        <div class="input-group mb-3">
+          <label class="input-label" for="setupEmail">Email (opcional)</label>
+          <input type="email" class="input-field" id="setupEmail"
+                 placeholder="admin@empresa.com"
+                 autocomplete="email">
+        </div>
+
+        <p id="setupError" role="alert" aria-live="polite"
+           style="color:var(--error); font-size:13px; text-align:center; display:none; margin-bottom:12px;"></p>
+
+        <button class="btn btn-primary btn-full" id="setupBtn"
+                onclick="Setup.crear()" style="font-size:17px;">
+          Crear administrador
+        </button>
+
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:14px;">
+          Este formulario se desactivará automáticamente tras crear el primer administrador.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 1: LOGIN ADMIN
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page active" id="page-admin-login" role="main">
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center;
+                justify-content:center; padding:32px 24px;">
+
+      <div style="font-size:60px; margin-bottom:20px; line-height:1;" aria-hidden="true">🛡</div>
+      <h1 style="font-size:24px; font-weight:700; margin-bottom:6px; letter-spacing:-0.02em;">
+        Administrador
+      </h1>
+      <p style="color:var(--text-secondary); font-size:15px; margin-bottom:36px; text-align:center;">
+        Acceso restringido al panel de gestión
+      </p>
+
+      <div style="width:100%; max-width:320px;">
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-bottom:10px;">
+          Introduce tu PIN de administrador
+        </p>
+        <input
+          type="password"
+          inputmode="numeric"
+          class="input-field pin-input"
+          id="adminPinInput"
+          placeholder="• • • •"
+          maxlength="6"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="PIN de administrador"
+          aria-describedby="adminLoginError"
+        >
+        <p id="adminLoginError"
+           role="alert"
+           aria-live="polite"
+           style="color:var(--error); font-size:13px; text-align:center;
+                  min-height:20px; margin-top:8px; display:none;">
+          PIN incorrecto
+        </p>
+        <button class="btn btn-primary btn-full mt-3" id="adminLoginBtn"
+                onclick="Admin.login()" style="font-size:17px;">
+          Acceder
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       PÁGINA 2: DASHBOARD ADMIN
+  ════════════════════════════════════════════════════════════ -->
+  <div class="page admin-desktop-layout" id="page-admin-dashboard">
+
+    <!-- TABS sticky debajo del header -->
+    <nav class="tabs" role="tablist" aria-label="Secciones del panel">
+      <button class="tab-btn active" role="tab" aria-selected="true"
+              onclick="Admin.switchTab('registros')" id="tab-btn-registros">
+        📋 Registros
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              onclick="Admin.switchTab('abiertos')" id="tab-btn-abiertos">
+        🟢 En jornada
+      </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              onclick="Admin.switchTab('empleados')" id="tab-btn-empleados">
+        👥 Empleados
+      </button>
+    </nav>
+
+    <!-- ── TAB: REGISTROS ──────────────────────────────── -->
+    <div id="tab-registros" class="tab-content"
+         role="tabpanel" aria-labelledby="tab-btn-registros">
+
+      <!-- Stats -->
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+          <div class="stat-number" id="statTotal" style="color:var(--admin)">—</div>
+          <div class="stat-label">Fichajes hoy</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statEntradas" style="color:var(--entrada)">—</div>
+          <div class="stat-label">Entradas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statSalidas" style="color:var(--salida)">—</div>
+          <div class="stat-label">Salidas</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statAbiertos" style="color:var(--warning)">—</div>
+          <div class="stat-label">En jornada</div>
+        </div>
+      </div>
+
+      <!-- Filtros -->
+      <div class="filtros">
+        <input type="date" class="input-field" id="filtroFecha"
+               aria-label="Filtrar por fecha">
+        <button class="btn btn-ghost btn-sm" onclick="Admin.irAHoy()"
+                title="Ver hoy" aria-label="Ver registros de hoy">
+          📅 Hoy
+        </button>
+        <select class="input-field" id="filtroEmpleado"
+                aria-label="Filtrar por empleado">
+          <option value="">Todos los empleados</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.consultarRegistros()"
+                aria-label="Aplicar filtros">
+          🔍 Filtrar
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarCSV()"
+                title="Exportar CSV" aria-label="Descargar CSV">
+          ⬇ CSV
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="Admin.exportarXLSX()"
+                title="Exportar Excel" aria-label="Descargar Excel XLSX" id="btnXlsx">
+          📊 Excel
+        </button>
+      </div>
+
+      <!-- Tabla -->
+      <div style="padding:0 var(--s2) var(--s2); overflow-y:auto; flex:1;
+                  -webkit-overflow-scrolling:touch;">
+        <div class="table-wrapper">
+          <table id="tablaRegistros" aria-label="Registros de fichaje">
+            <thead>
+              <tr>
+                <th data-col="nombre"  onclick="Admin.sortTabla('nombre')"  class="sortable">Empleado ↕</th>
+                <th data-col="tipo"    onclick="Admin.sortTabla('tipo')"    class="sortable">Tipo ↕</th>
+                <th data-col="estado">Estado</th>
+                <th data-col="fecha"   onclick="Admin.sortTabla('fecha')"   class="sortable">Fecha ↕</th>
+                <th data-col="hora"    onclick="Admin.sortTabla('hora')"    class="sortable">Hora ↕</th>
+                <th data-col="idRegistro">ID</th>
+              </tr>
+            </thead>
+            <tbody id="tablaBody">
+              <tr>
+                <td colspan="5">
+                  <div class="loading-overlay">
+                    <div class="loader"></div>
+                    <span>Cargando...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:10px;"
+           id="tablaInfo" aria-live="polite"></p>
+      </div>
+
+    </div>
+
+    <!-- ── TAB: EN JORNADA ─────────────────────────────── -->
+    <div id="tab-abiertos" class="tab-content" style="display:none;"
+         role="tabpanel" aria-labelledby="tab-btn-abiertos">
+      <div style="padding:var(--s3);">
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    margin-bottom:var(--s2);">
+          <div class="section-title" style="margin-bottom:0;">
+            Empleados con jornada activa
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="Admin.consultarAbiertos()"
+                  aria-label="Actualizar lista">↻ Actualizar</button>
+        </div>
+        <div id="listaAbiertos">
+          <div class="loading-overlay">
+            <div class="loader"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); text-align:center; margin-top:10px;">
+          Se actualiza automáticamente cada 15 s
+        </p>
+      </div>
+    </div>
+
+    <!-- ── TAB: EMPLEADOS ─────────────────────────────── -->
+    <div id="tab-empleados" class="tab-content" style="display:none;"
+         role="tabpanel" aria-labelledby="tab-btn-empleados">
+      <div style="padding:var(--s3);">
+
+        <div style="display:flex; justify-content:space-between; align-items:center;
+                    margin-bottom:var(--s2);">
+          <div class="section-title" style="margin-bottom:0;">Empleados registrados</div>
+          <button class="btn btn-primary btn-sm"
+                  onclick="Admin.abrirModalNuevoEmpleado()"
+                  aria-label="Crear nuevo empleado">
+            ＋ Nuevo
+          </button>
+        </div>
+
+        <div id="listaEmpleados">
+          <div class="loading-overlay">
+            <div class="loader"></div>
+            <span>Cargando...</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /page-admin-dashboard -->
+</div><!-- /app-container -->
+
+<!-- ── MODAL: CREAR / EDITAR EMPLEADO ─────────────────────── -->
+<div class="modal-backdrop" id="modalNuevoEmp"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="modalEmpTitulo"
+     onclick="Admin.cerrarModal()">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle" aria-hidden="true"></div>
+    <div class="modal-title" id="modalEmpTitulo">➕ Nuevo Empleado</div>
+
+    <input type="hidden" id="nuevoEmpId">
+
+    <div class="input-group mb-2">
+      <label class="input-label" for="nuevoNombre">Nombre completo</label>
+      <input type="text" class="input-field" id="nuevoNombre"
+             placeholder="Ej: María García López"
+             autocomplete="name">
+    </div>
+
+    <div class="input-group mb-2">
+      <label class="input-label" for="nuevoPin">PIN (4 dígitos)</label>
+      <input type="text" inputmode="numeric" maxlength="4"
+             class="input-field" id="nuevoPin"
+             placeholder="1234"
+             autocomplete="new-password">
+      <span style="font-size:12px; color:var(--text-muted);" id="nuevoPinHint"></span>
+    </div>
+
+    <div class="input-group mb-2">
+      <label class="input-label" for="nuevoEmail">Email (opcional)</label>
+      <input type="email" class="input-field" id="nuevoEmail"
+             placeholder="empleado@empresa.com"
+             autocomplete="email">
+    </div>
+
+    <div class="input-group mb-2">
+      <label class="input-label" for="nuevoDni">DNI / NIE</label>
+      <input type="text" class="input-field" id="nuevoDni"
+             placeholder="Ej: 12345678X">
+    </div>
+
+    <div class="input-group mb-3">
+      <label class="input-label" for="nuevoPuesto">Puesto de trabajo</label>
+      <input type="text" class="input-field" id="nuevoPuesto"
+             placeholder="Ej: Odontólogo, Auxiliar...">
+    </div>
+
+    <!-- ── TURNOS ───────────────────────────────────────────── -->
+    <div style="margin-bottom:8px; margin-top:4px;">
+      <span class="input-label" style="display:block; margin-bottom:10px;">
+        🕐 Horario laboral (L–V)
+      </span>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:center;">
+        <div>
+          <label class="input-label" for="turno1Entrada" style="font-size:11px; margin-bottom:4px;">Turno 1 — Entrada</label>
+          <input type="time" class="input-field" id="turno1Entrada" style="text-align:center;">
+        </div>
+        <div>
+          <label class="input-label" for="turno1Salida" style="font-size:11px; margin-bottom:4px;">Turno 1 — Salida</label>
+          <input type="time" class="input-field" id="turno1Salida" style="text-align:center;">
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <span style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:8px;">
+        Turno 2 (opcional — jornada partida)
+      </span>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; align-items:center;">
+        <div>
+          <label class="input-label" for="turno2Entrada" style="font-size:11px; margin-bottom:4px;">Turno 2 — Entrada</label>
+          <input type="time" class="input-field" id="turno2Entrada" style="text-align:center;">
+        </div>
+        <div>
+          <label class="input-label" for="turno2Salida" style="font-size:11px; margin-bottom:4px;">Turno 2 — Salida</label>
+          <input type="time" class="input-field" id="turno2Salida" style="text-align:center;">
+        </div>
+      </div>
+    </div>
+
+    <!-- PIN creado — visible solo después de crear -->
+    <div id="pinVisualWrapper" style="display:none; margin-bottom:16px;">
+      <div style="background:var(--entrada-dim);
+                  border:1px solid rgba(0,214,143,0.25);
+                  border-radius:var(--radius); padding:18px; text-align:center;">
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:4px;">
+          ✅ Empleado creado:
+          <strong id="pinVisualNombre" style="color:var(--text-primary)"></strong>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">
+          ID: <span id="pinVisualId" style="font-family:monospace;"></span>
+        </div>
+        <div style="font-size:13px; color:var(--text-secondary); margin-bottom:8px;">
+          PIN para entregar al empleado:
+        </div>
+        <div style="font-size:44px; font-weight:700; letter-spacing:0.35em;
+                    color:var(--entrada); font-variant-numeric:tabular-nums;"
+             id="pinVisualPin"></div>
+        <p style="font-size:12px; color:var(--text-muted); margin-top:10px;">
+          ⚠️ Anótalo ahora. No podrás consultarlo de nuevo.
+        </p>
+        <button class="btn btn-primary btn-sm mt-2" style="width:100%"
+                onclick="Admin.confirmarPinVisto()">
+          ✅ He anotado el PIN — Cerrar
+        </button>
+      </div>
+    </div>
+
+    <p id="nuevoEmpError" role="alert" aria-live="polite"
+       style="color:var(--error); font-size:13px; display:none; margin-bottom:12px;"></p>
+
+    <div style="display:flex; gap:var(--s2);">
+      <button class="btn btn-ghost btn-sm flex-1"
+              onclick="Admin.cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="nuevoEmpBtn"
+              onclick="Admin.crearEmpleado()">Crear empleado</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── MODAL: CONFIRMACIÓN ────────────────────────────────── -->
+<div class="modal-backdrop" id="modalConfirm"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="confirmModalTitulo">
+  <div class="modal" onclick="event.stopPropagation()"
+       style="max-width:380px;">
+    <div class="modal-handle" aria-hidden="true"></div>
+    <div class="modal-title" id="confirmModalTitulo">¿Confirmar acción?</div>
+    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:var(--s3);"
+       id="confirmModalMensaje"></p>
+    <div style="display:flex; gap:var(--s2);">
+      <button class="btn btn-ghost btn-sm flex-1" id="confirmModalCancel">Cancelar</button>
+      <button class="btn btn-danger flex-1" id="confirmModalOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ───────────────────────────────────────────────── -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="admin.js?v=2.3"></script>
+<script>
+  // ── PWA INSTALL ─────────────────────────────────────────────
+  let deferredPrompt;
+  const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Si Chrome nos da el prompt automático, úsalo
+  });
+
+  function installPWA() {
+    if (deferredPrompt) {
+      // Chrome Android: prompt nativo de instalación
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then((result) => {
+        deferredPrompt = null;
+        if (result.outcome === 'accepted') {
+          document.getElementById('adminInstallBtn').style.display = 'none';
+        }
+      });
+    } else {
+      // No hay prompt automático (ya instalada como admin, o iOS):
+      // Mostrar instrucciones manuales para instalar la app de EMPLEADOS
+      const modal = document.getElementById('modalInstall');
+      const stepsAndroid = document.getElementById('installStepsAndroid');
+      const stepsIOS = document.getElementById('installStepsIOS');
+      stepsAndroid.style.display = esIOS ? 'none' : '';
+      stepsIOS.style.display     = esIOS ? '' : 'none';
+      modal.style.display = 'flex';
+    }
+  }
+
+  // Ocultar botón solo si la PWA de fichaje (no admin) ya está instalada
+  // Esto es difícil de detectar, así que lo dejamos siempre visible
+  // salvo que el propio beforeinstallprompt no llegue Y estemos en modo standalone
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+  });
+
+  // La columna Estado se rellena directamente en admin.js → renderTabla().
+  // No se necesita ningún observador externo.
+  // Inyectamos exportarXLSX en el objeto Admin una vez que el DOM y admin.js están listos
+  document.addEventListener('DOMContentLoaded', () => {
+    // Esperamos a que Admin esté disponible (admin.js puede declararlo de forma diferida)
+    const injectXLSX = () => {
+      if (typeof Admin === 'undefined') { setTimeout(injectXLSX, 200); return; }
+
+      Admin.exportarXLSX = function() {
+        // Recoger los datos de la tabla visible
+        const tabla = document.getElementById('tablaRegistros');
+        if (!tabla) return;
+
+        const filtroEmpleado = document.getElementById('filtroEmpleado');
+        const filtroFecha    = document.getElementById('filtroFecha');
+        const empleadoSel    = filtroEmpleado ? filtroEmpleado.options[filtroEmpleado.selectedIndex]?.text : 'Todos';
+        const fechaSel       = filtroFecha ? (filtroFecha.value || 'Todas') : 'Todas';
+
+        // Construir array de datos desde la tabla DOM
+        const rows = [];
+        const headers = [];
+        tabla.querySelectorAll('thead th').forEach(th => {
+          // Limpiar el texto de los indicadores de orden (▲▼ y ↕)
+          headers.push(th.textContent.replace(/[↕▲▼]/g, '').trim());
+        });
+        rows.push(headers);
+
+        tabla.querySelectorAll('tbody tr').forEach(tr => {
+          const cells = tr.querySelectorAll('td');
+          if (cells.length === 0) return; // skip loading/empty rows
+          const row = [];
+          cells.forEach(td => row.push(td.textContent.trim()));
+          rows.push(row);
+        });
+
+        if (rows.length <= 1) {
+          if (typeof Admin.toast === 'function') Admin.toast('No hay datos para exportar', 'error');
+          return;
+        }
+
+        // Crear workbook con SheetJS
+        const wb  = XLSX.utils.book_new();
+        const ws  = XLSX.utils.aoa_to_sheet(rows);
+
+        // Ancho de columnas automático
+        const colWidths = headers.map((h, i) => {
+          const maxLen = rows.reduce((m, r) => Math.max(m, (r[i] || '').toString().length), h.length);
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+        });
+        ws['!cols'] = colWidths;
+
+        // Metadatos en una hoja aparte
+        const meta = [
+          ['Panel Admin — Fichaje Laboral'],
+          ['Exportado el', new Date().toLocaleString('es-ES')],
+          ['Filtro empleado', empleadoSel],
+          ['Filtro fecha', fechaSel],
+          ['Total registros', rows.length - 1],
+        ];
+        const wsMeta = XLSX.utils.aoa_to_sheet(meta);
+        wsMeta['!cols'] = [{ wch: 20 }, { wch: 30 }];
+
+        XLSX.utils.book_append_sheet(wb, ws,     'Registros');
+        XLSX.utils.book_append_sheet(wb, wsMeta, 'Info');
+
+        const fecha = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `fichajes_${fecha}.xlsx`);
+      };
+    };
+    injectXLSX();
+  });
+
+  // ── SERVICE WORKER ───────────────────────────────────────────
+  // Requiere que service-worker.js esté desplegado junto a este HTML.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then(reg => console.log('Service Worker registrado', reg.scope))
+        .catch(err => {
+          // El archivo service-worker.js no existe todavía en el servidor.
+          // La app sigue funcionando; solo se desactiva el soporte offline.
+          if (err.name === 'TypeError' || (err instanceof TypeError)) {
+            console.warn('Service Worker: archivo no encontrado. Despliega service-worker.js para soporte offline.');
+          } else {
+            console.warn('Service Worker no pudo registrarse:', err.message);
+          }
+        });
+    });
+  }
+</script>
+</body>
+</html>
