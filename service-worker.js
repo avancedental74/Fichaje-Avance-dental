@@ -93,7 +93,7 @@ async function staleWhileRevalidate(req) {
 const PBS_TAG = 'geo-fichaje';
 
 // Minutos de tolerancia antes de lanzar alerta por no-fichaje (configurable)
-const ALERTA_RETRASO_MIN = 30;
+const ALERTA_RETRASO_MIN = 15;
 
 async function registrarPeriodicSync() {
   try {
