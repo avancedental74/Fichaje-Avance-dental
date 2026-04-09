@@ -28,7 +28,8 @@ const State = {
   pollingTimer: null,
   procesoActivo: false,      // Bloqueo para evitar peticiones duplicadas
   ultimoFichajeAuto: 0,      // Timestamp del último fichaje automático
-  dentroDelCentro: null  // null = desconocido, true/false cuando tengamos GPS
+  dentroDelCentro: null, // null = desconocido, true/false cuando tengamos GPS
+  recognition:    null   // Objeto de reconocimiento de voz
 };
 
 // ── UTILIDADES ───────────────────────────────────────────────
@@ -457,6 +458,7 @@ const App = {
       iniciarGeofencing();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
+      document.getElementById('voice-btn').style.display = 'flex';
 
     } catch (err) {
       // FIX C2: mensaje diferenciado
@@ -480,6 +482,7 @@ const App = {
     detenerGeofencing();
     document.getElementById('pinInput').value = '';
     document.getElementById('logoutBtn').style.display = 'none';
+    document.getElementById('voice-btn').style.display = 'none';
     showPage('page-login');
     toast('Sesión cerrada. PIN eliminado del dispositivo.', '', 4000);
   },
@@ -503,6 +506,7 @@ const App = {
       iniciarGeofencing();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
+      document.getElementById('voice-btn').style.display = 'flex';
 
       // ¿Venimos de una notificación con fichaje pendiente?
       if (State._autoficharPendiente) {
@@ -697,6 +701,67 @@ const App = {
       console.error('ficharAutomatico error:', err);
     } finally {
       State.procesoActivo = false;
+    }
+  },
+
+  // ── RECONOCIMIENTO DE VOZ ───────────────────────────────────
+  escucharVoz() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast('⚠️ Tu navegador no soporta reconocimiento de voz', 'error');
+      return;
+    }
+
+    if (!State.recognition) {
+      State.recognition = new SpeechRecognition();
+      State.recognition.lang = 'es-ES';
+      State.recognition.continuous = false;
+      State.recognition.interimResults = false;
+
+      State.recognition.onresult = (event) => {
+        const result = event.results[0][0].transcript.toLowerCase();
+        document.getElementById('voice-text').textContent = `He entendido: "${result}"`;
+        this.procesarComandoVoz(result);
+      };
+
+      State.recognition.onerror = () => {
+        toast('⚠️ Error al escuchar. Inténtalo de nuevo.', 'error');
+        this.cerrarVoz();
+      };
+
+      State.recognition.onend = () => {
+        setTimeout(() => this.cerrarVoz(), 2000);
+      };
+    }
+
+    document.getElementById('voice-modal').style.display = 'flex';
+    document.getElementById('voice-text').textContent = 'Escuchando...';
+    haptic();
+    State.recognition.start();
+  },
+
+  cerrarVoz() {
+    document.getElementById('voice-modal').style.display = 'none';
+    if (State.recognition) State.recognition.stop();
+  },
+
+  procesarComandoVoz(texto) {
+    if (texto.includes('entrada') || texto.includes('entrar') || texto.includes('fichar entrada')) {
+      if (State.estado === 'LIBRE') {
+        toast('🎙️ Comando voz: ENTRADA', 'success');
+        this.fichar();
+      } else {
+        toast('⚠️ Ya has fichado la entrada', 'warning');
+      }
+    } else if (texto.includes('salida') || texto.includes('salir') || texto.includes('fichar salida')) {
+      if (State.estado === 'EN_JORNADA') {
+        toast('🎙️ Comando voz: SALIDA', 'success');
+        this.fichar();
+      } else {
+        toast('⚠️ No has fichado la entrada todavía', 'warning');
+      }
+    } else {
+      toast(`❓ No entiendo "${texto}". Prueba con "Entrada" o "Salida".`, 'info');
     }
   },
 

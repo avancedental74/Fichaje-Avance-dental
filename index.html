@@ -183,7 +183,24 @@
 <!-- ── TOAST ───────────────────────────────────────────────── -->
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=3.0" defer></script>
+    <!-- Botón Flotante de Voz -->
+    <div id="voice-btn" class="voice-fab" onclick="App.escucharVoz()" style="display:none">
+      <div class="voice-pulse"></div>
+      <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </div>
+
+    <!-- Modal de Voz -->
+    <div id="voice-modal" class="voice-modal">
+      <div class="voice-modal-content">
+        <div class="voice-wave">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p id="voice-text">Escuchando...</p>
+        <button onclick="App.cerrarVoz()" class="btn btn-secondary">Cancelar</button>
+      </div>
+    </div>
+
+    <script src="app.js?v=4.0"></script>
 <script>
   // ── PWA INSTALL ─────────────────────────────────────────────
   let deferredPrompt;
