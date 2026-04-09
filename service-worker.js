@@ -454,9 +454,13 @@ async function manejarGeoEvento({ dentro, esIOS, lat, lng }) {
   if (!sw.pin) return;
   if (!esDiaLaboral()) return;
 
-  // Comprobar ventana activa antes de actuar
-  const ventana = calcularVentanaActual(sw.turnos);
-  if (!ventana) return; // Fuera de ventana → ignorar
+  // Comprobar ventana activa antes de actuar.
+  // Si el empleado TIENE turnos configurados y estamos FUERA de su ventana horaria,
+  // ignorar el evento para evitar fichajes a horas no laborales.
+  // Si NO tiene turnos configurados, se permite fichar según el estado (LIBRE/EN_JORNADA).
+  const ventana     = calcularVentanaActual(sw.turnos);
+  const tieneTurnos = sw.turnos && sw.turnos.length > 0;
+  if (tieneTurnos && !ventana) return; // fuera de ventana → ignorar
 
   const necesitaEntrada = dentro  && sw.estado === 'LIBRE';
   const necesitaSalida  = !dentro && sw.estado === 'EN_JORNADA';

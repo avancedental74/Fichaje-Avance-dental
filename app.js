@@ -170,10 +170,34 @@ function iniciarGeofencing() {
 
     actualizarGeoBanner(dentro, Math.round(dist));
 
-    // Primera lectura: establecer estado inicial SIN fichar
+    // Primera lectura: establecer estado inicial.
+    // Si ya estamos DENTRO y el estado es LIBRE → disparar fichaje de entrada.
+    // Si ya estamos FUERA  y el estado es EN_JORNADA → disparar fichaje de salida.
+    // Esto cubre el caso en que el empleado abre la app ya dentro/fuera del centro.
     if (!_geoInicializado) {
-      _geoInicializado    = true;
+      _geoInicializado      = true;
       State.dentroDelCentro = dentro;
+
+      const debeEntrada = dentro  && State.estado === 'LIBRE';
+      const debeSalida  = !dentro && State.estado === 'EN_JORNADA';
+
+      if (debeEntrada || debeSalida) {
+        if (navigator.serviceWorker?.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            tipo:  'GEO_EVENTO',
+            dentro,
+            esIOS: ES_IOS,
+            lat:   pos.coords.latitude,
+            lng:   pos.coords.longitude
+          });
+        }
+        if (ES_IOS) {
+          const msg = debeEntrada
+            ? '📍 En el centro — toca la notificación para fichar la entrada'
+            : '📍 Fuera del centro — toca la notificación para fichar la salida';
+          toast(msg, '', 8000);
+        }
+      }
       return;
     }
 
@@ -564,12 +588,12 @@ const App = {
 
       this.mostrarConfirm(resp.data);
 
-      // Refrescar del servidor después de un delay para confirmar
-      // Delay aumentado a 4 s para dar tiempo a Apps Script a propagar el cambio
+      // Refrescar del servidor después de un delay para confirmar.
+      // 8 s de espera: Apps Script puede tardar hasta 8-15 s en propagar un appendRow.
       setTimeout(() => {
         this.refrescarEstadoConGuardia(nuevoEstado);
         this.cargarHistorial();
-      }, 4000);
+      }, 8000);
 
     } catch (err) {
       loader.style.display = 'none';
@@ -653,20 +677,22 @@ const App = {
     } catch (_) {}
   },
 
-  // FIX BUG 1: Refresco con guardia — si el servidor aún devuelve el estado
-  // anterior (propagación lenta de Apps Script), reintenta en 3 s más en lugar
-  // de sobreescribir la UI con el estado incorrecto.
-  async refrescarEstadoConGuardia(estadoEsperado) {
+  // Refresco con guardia — si el servidor aún devuelve el estado anterior
+  // (propagación lenta de Apps Script), reintenta hasta 4 veces con guardia.
+  // Nunca sobreescribe la UI con un estado incorrecto.
+  async refrescarEstadoConGuardia(estadoEsperado, intento = 0) {
     try {
       const resp = await apiGet({ accion: 'estado', pin: State.pin });
       if (!resp.ok) return;
       if (resp.data.estado === estadoEsperado) {
-        // Servidor ya refleja el cambio → actualizar normalmente
+        // Servidor ya refleja el cambio → actualizar la UI con los datos completos
         this.renderEstado(resp.data);
-      } else {
-        // Servidor aún devuelve estado anterior → reintentar en 3 s más
-        setTimeout(() => this.refrescarEstado(), 3000);
+      } else if (intento < 4) {
+        // Servidor aún devuelve estado anterior → reintentar CON guardia
+        setTimeout(() => this.refrescarEstadoConGuardia(estadoEsperado, intento + 1), 5000);
       }
+      // Tras 4 intentos (~28 s total) nos rendimos silenciosamente.
+      // El estado local (seteado por renderEstado justo tras fichar) es correcto.
     } catch (_) {}
   },
 
