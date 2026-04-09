@@ -343,7 +343,7 @@ function accionAdminDia(params) {
   const registros = [];
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[6] === fechaBuscar) {
+    if (normalizarFecha(reg[6]) === fechaBuscar) {
       if (!idEmpleado || reg[1] === idEmpleado) {
         registros.push(formatRegistro(reg));
       }
@@ -382,7 +382,7 @@ function accionAdminAbiertos(params) {
 
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[6] !== hoyStr) continue;           // solo registros de hoy
+    if (normalizarFecha(reg[6]) !== hoyStr) continue;  // solo registros de hoy
 
     const idEmp    = reg[1];
     const tsActual = reg[4] ? new Date(reg[4]) : new Date(0);
@@ -403,7 +403,7 @@ function accionAdminAbiertos(params) {
   const horaEntradaPor = {};
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[6] !== hoyStr || reg[3] !== 'ENTRADA') continue;
+    if (normalizarFecha(reg[6]) !== hoyStr || reg[3] !== 'ENTRADA') continue;
     const idEmp = reg[1];
     const ts    = reg[4] ? new Date(reg[4]) : new Date(0);
     if (!horaEntradaPor[idEmp] || ts > horaEntradaPor[idEmp].ts) {
@@ -544,9 +544,10 @@ function accionAlertaNoFichaje(body, ip) {
   const hoja  = getSheet(CONFIG.HOJAS.ALERTAS);
   const datos = hoja.getDataRange().getValues();
   for (let i = 1; i < datos.length; i++) {
+    const tsAlerta = datos[i][6] instanceof Date ? datos[i][6] : new Date(datos[i][6]);
     if (datos[i][1] === empleado.id &&
         datos[i][3] === turnoEntrada &&
-        formatFecha(new Date(datos[i][6])) === hoyStr) {
+        formatFecha(tsAlerta) === hoyStr) {
       // Ya existe → actualizar minutos de retraso pero no duplicar
       hoja.getRange(i + 1, 5).setValue(minutosRetraso || datos[i][4]);
       return respOk({ mensaje: 'Alerta actualizada', id: datos[i][0] });
@@ -585,7 +586,8 @@ function accionAdminAlertasNoFichaje(params) {
   for (let i = 1; i < datos.length; i++) {
     const fila = datos[i];
     // Solo alertas de hoy no resueltas
-    if (formatFecha(new Date(fila[6])) === hoyStr && !fila[7]) {
+    const tsAlerta = fila[6] instanceof Date ? fila[6] : new Date(fila[6]);
+    if (formatFecha(tsAlerta) === hoyStr && !fila[7]) {
       alertas.push({
         idAlerta:          fila[0],
         idEmpleado:        fila[1],
@@ -636,7 +638,7 @@ function getUltimoRegistroDia(idEmpleado, fechaStr) {
 
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[1] === idEmpleado && reg[6] === fechaStr) {
+    if (reg[1] === idEmpleado && normalizarFecha(reg[6]) === fechaStr) {
       const ts = reg[4] ? new Date(reg[4]) : new Date(0);
       if (!ultimo || ts > new Date(ultimo.timestamp)) {
         ultimo = {
@@ -658,7 +660,7 @@ function getRegistrosDia(idEmpleado, fechaStr) {
 
   for (let i = 1; i < datos.length; i++) {
     const reg = datos[i];
-    if (reg[1] === idEmpleado && reg[6] === fechaStr) {
+    if (reg[1] === idEmpleado && normalizarFecha(reg[6]) === fechaStr) {
       regs.push({ tipo: reg[3], hora: formatHora(reg[4]) });
     }
   }
@@ -672,7 +674,7 @@ function formatRegistro(fila) {
     nombre:            fila[2],
     tipo:              fila[3],
     timestampServidor: fila[4] ? new Date(fila[4]).toISOString() : '',
-    fecha:             fila[6],
+    fecha:             normalizarFecha(fila[6]),   // normalizar por si Sheets lo convirtió a Date
     hora:              fila[4] ? formatHora(fila[4]) : '',
     latitud:           fila[9]  || null,
     longitud:          fila[10] || null,
@@ -693,6 +695,16 @@ function formatHora(date) {
   const h = String(d.getHours()).padStart(2, '0');
   const m = String(d.getMinutes()).padStart(2, '0');
   return `${h}:${m}`;
+}
+
+// ── NORMALIZAR FECHA ──────────────────────────────────────────
+// Google Sheets auto-convierte strings "YYYY-MM-DD" a objetos Date
+// al leerlos con getDataRange().getValues(). Esta función maneja
+// ambos casos para que todas las comparaciones de fecha sean seguras.
+function normalizarFecha(val) {
+  if (!val) return '';
+  if (val instanceof Date) return formatFecha(val);
+  return String(val).slice(0, 10); // garantiza "YYYY-MM-DD"
 }
 
 // ============================================================

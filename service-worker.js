@@ -7,7 +7,7 @@
 //  · Solo activo Lunes–Viernes, dentro de ventanas de turno
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-v5.0';
+const CACHE_NAME    = 'fichaje-v5.1';
 const STATIC_ASSETS = [
   './index.html', './admin.html', './styles.css',
   './app.js', './admin.js', './manifest.json',
@@ -176,8 +176,10 @@ async function comprobarAlertaNoFichaje() {
 }
 
 // ── Lógica principal del sync periódico ──────────────────────
+// Funciona SIN app abierta (Periodic Background Sync, Chrome Android).
+// También funciona cuando la app está abierta (el SW se ejecuta siempre).
 async function comprobarGeoYFichar() {
-  // Sin sesión → no hacer nada
+  // Sin sesión → intentar cargar de IDB (persiste entre ejecuciones del SW)
   if (!sw.pin) {
     await cargarSesionDeIDB();
     if (!sw.pin) return;
@@ -185,17 +187,30 @@ async function comprobarGeoYFichar() {
 
   if (!esDiaLaboral()) return;
 
-  const ventana = calcularVentanaActual(sw.turnos);
-  if (!ventana) return; // Fuera de ventana de turno → nada
+  const ventana     = calcularVentanaActual(sw.turnos);
+  const tieneTurnos = sw.turnos && sw.turnos.length > 0;
 
-  console.log(`[SW] Ventana activa: tipo=${ventana.tipo}, turno=${ventana.entrada}-${ventana.salida}`);
+  // ── Determinar qué tipo de fichaje se espera ────────────────
+  // Con turnos → respetar ventana horaria (fuera de ella, ignorar)
+  // Sin turnos → basar en estado actual (LIBRE→ENTRADA, EN_JORNADA→SALIDA)
+  let tipoEsperado;
+  if (ventana) {
+    tipoEsperado = ventana.tipo;
+  } else if (!tieneTurnos) {
+    if      (sw.estado === 'LIBRE')      tipoEsperado = 'ENTRADA';
+    else if (sw.estado === 'EN_JORNADA') tipoEsperado = 'SALIDA';
+    else return;
+  } else {
+    return; // Tiene turnos pero está fuera de ventana horaria → ignorar
+  }
 
-  // Comprobar si ya se fichó el tipo esperado hoy
-  const necesita = ventana.tipo === 'ENTRADA'
+  // Verificar que el estado actual requiere ese fichaje
+  const necesita = tipoEsperado === 'ENTRADA'
     ? sw.estado === 'LIBRE'
     : sw.estado === 'EN_JORNADA';
-
   if (!necesita) return;
+
+  console.log(`[SW] Periodic sync → tipoEsperado=${tipoEsperado}, estado=${sw.estado}`);
 
   // Obtener posición GPS
   let lat = null, lng = null;
@@ -204,11 +219,11 @@ async function comprobarGeoYFichar() {
     lat = pos.coords.latitude;
     lng = pos.coords.longitude;
   } catch (_) {
-    // Sin GPS — lanzamos notificación para que el empleado fiche manualmente
+    // Sin GPS → notificación para fichaje manual
     await mostrarNotificacion(
-      ventana.tipo === 'ENTRADA' ? '🟢 Hora de fichar entrada' : '🔴 Hora de fichar salida',
-      `${sw.nombre} — toca para registrar tu ${ventana.tipo.toLowerCase()}`,
-      ventana.tipo, null, null
+      tipoEsperado === 'ENTRADA' ? '🟢 Hora de fichar entrada' : '🔴 Hora de fichar salida',
+      `${sw.nombre} — toca para registrar tu ${tipoEsperado.toLowerCase()}`,
+      tipoEsperado, null, null
     );
     return;
   }

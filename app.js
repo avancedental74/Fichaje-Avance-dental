@@ -162,73 +162,45 @@ function iniciarGeofencing() {
   // NOTA: el listener 'message' del SW ya está registrado en App.init()
   // No se vuelve a añadir aquí para evitar duplicados en cada login
 
-  const onPos = (pos) => {
-    if (!esDiaLaboral()) return; // doble check por si cambió el día
-
-    const dist   = haversineMetros(pos.coords.latitude, pos.coords.longitude, GEO.lat, GEO.lng);
-    const dentro = dist <= GEO.radioMetros;
-
-    actualizarGeoBanner(dentro, Math.round(dist));
-
-    // Primera lectura: establecer estado inicial.
-    // Si ya estamos DENTRO y el estado es LIBRE → disparar fichaje de entrada.
-    // Si ya estamos FUERA  y el estado es EN_JORNADA → disparar fichaje de salida.
-    // Esto cubre el caso en que el empleado abre la app ya dentro/fuera del centro.
-    if (!_geoInicializado) {
-      _geoInicializado      = true;
-      State.dentroDelCentro = dentro;
-
-      const debeEntrada = dentro  && State.estado === 'LIBRE';
-      const debeSalida  = !dentro && State.estado === 'EN_JORNADA';
-
-      if (debeEntrada || debeSalida) {
-        if (navigator.serviceWorker?.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            tipo:  'GEO_EVENTO',
-            dentro,
-            esIOS: ES_IOS,
-            lat:   pos.coords.latitude,
-            lng:   pos.coords.longitude
-          });
-        }
-        if (ES_IOS) {
-          const msg = debeEntrada
-            ? '📍 En el centro — toca la notificación para fichar la entrada'
-            : '📍 Fuera del centro — toca la notificación para fichar la salida';
-          toast(msg, '', 8000);
-        }
+  // --- LÓGICA CAPACITOR NATIVA (Android APK) ---
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    console.log('[Native] Activando BackgroundGeolocation nativo...');
+    try {
+      const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+      
+      // Detener watchers previos si los hubiera
+      if (GEO.nativeWatchId) {
+        BackgroundGeolocation.removeWatcher({ id: GEO.nativeWatchId });
       }
-      return;
-    }
 
-    // Sin cambio de zona → nada
-    if (dentro === State.dentroDelCentro) return;
-
-    // ── Cambio de zona detectado ──────────────────────────────
-    State.dentroDelCentro = dentro;
-
-    const necesitaEntrada = dentro  && State.estado === 'LIBRE';
-    const necesitaSalida  = !dentro && State.estado === 'EN_JORNADA';
-    if (!necesitaEntrada && !necesitaSalida) return;
-
-    // Enviar evento al SW — él decide si ficha directo (Android) o notifica (iOS)
-    if (navigator.serviceWorker?.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        tipo:   'GEO_EVENTO',
-        dentro,
-        esIOS:  ES_IOS,
-        lat:    pos.coords.latitude,
-        lng:    pos.coords.longitude
+      BackgroundGeolocation.addWatcher({
+        backgroundMessage: "Rastreo de ubicación activo para el fichaje automático.",
+        backgroundTitle: "Fichaje Laboral",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 30 // segundos/metros aproximados
+      }, (location, error) => {
+        if (error) {
+          console.error('[Native] Error GPS:', error);
+          return;
+        }
+        if (location) {
+          processGeoUpdate(location.latitude, location.longitude);
+        }
+      }).then(watcherId => {
+        GEO.nativeWatchId = watcherId;
       });
-    }
 
-    // En iOS además mostramos mensaje en la app si está abierta
-    if (ES_IOS) {
-      const msg = dentro
-        ? '📍 Has llegado al centro — toca la notificación para fichar'
-        : '📍 Has salido del centro — toca la notificación para fichar la salida';
-      toast(msg, '', 8000);
+      // No necesitamos watchPosition web si estamos en nativo (evitamos consumo doble)
+      return;
+    } catch (e) {
+      console.warn('[Native] Fallo al iniciar plugin nativo, usando fallback web:', e);
     }
+  }
+
+  // --- LÓGICA WEB / PWA (Fallback) ---
+  const onPos = (pos) => {
+    processGeoUpdate(pos.coords.latitude, pos.coords.longitude);
   };
 
   const onError = () => {
@@ -243,11 +215,52 @@ function iniciarGeofencing() {
   });
 }
 
+// Función común para procesar coordenadas (Nativas o Web)
+function processGeoUpdate(lat, lng) {
+  if (!esDiaLaboral()) return;
+
+  const dist   = haversineMetros(lat, lng, GEO.lat, GEO.lng);
+  const dentro = dist <= GEO.radioMetros;
+
+  actualizarGeoBanner(dentro, Math.round(dist));
+
+  if (!_geoInicializado) {
+    _geoInicializado      = true;
+    State.dentonDelCentro = dentro;
+
+    const debeEntrada = dentro  && State.estado === 'LIBRE';
+    const debeSalida  = !dentro && State.estado === 'EN_JORNADA';
+
+    if (debeEntrada || debeSalida) {
+      const accion = debeEntrada ? 'ENTRADA' : 'SALIDA';
+      toast('📍 Ubicación detectada — Sincronizando fichaje...', '', 5000);
+      setTimeout(() => App.ficharAutomatico(accion), 1500);
+    }
+    return;
+  }
+
+  if (dentro === State.dentroDelCentro) return;
+  State.dentroDelCentro = dentro;
+
+  const necesitaEntrada = dentro  && State.estado === 'LIBRE';
+  const necesitaSalida  = !dentro && State.estado === 'EN_JORNADA';
+  
+  if (necesitaEntrada) App.ficharAutomatico('ENTRADA');
+  if (necesitaSalida)  App.ficharAutomatico('SALIDA');
+}
+
 function detenerGeofencing() {
   if (GEO.watchId !== null) {
     navigator.geolocation.clearWatch(GEO.watchId);
     GEO.watchId = null;
   }
+  // Detención nativa
+  if (window.Capacitor && window.Capacitor.isNativePlatform() && GEO.nativeWatchId) {
+    const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+    BackgroundGeolocation.removeWatcher({ id: GEO.nativeWatchId });
+    GEO.nativeWatchId = null;
+  }
+
   navigator.serviceWorker?.removeEventListener?.('message', onMensajeSW);
   if (navigator.serviceWorker?.controller) {
     navigator.serviceWorker.controller.postMessage({ tipo: 'LOGOUT' });
@@ -386,7 +399,7 @@ const App = {
       State._autoficharPendiente = autofichar;
     }
 
-    const pinGuardado = sessionStorage.getItem('fichaje_pin');
+    const pinGuardado = localStorage.getItem('fichaje_pin');
     if (pinGuardado) {
       State.pin = pinGuardado;
       this.cargarEmpleado();
@@ -426,7 +439,7 @@ const App = {
       State.pin    = pin;
       State.nombre = resp.data.nombre;
       State.turnos = resp.data.turnos || [];
-      sessionStorage.setItem('fichaje_pin', pin);
+      localStorage.setItem('fichaje_pin', pin);
 
       this.renderEstado(resp.data);
       this.iniciarReloj();
@@ -448,7 +461,7 @@ const App = {
 
   // ── LOGOUT ─────────────────────────────────────────────────
   logout() {
-    sessionStorage.removeItem('fichaje_pin');
+    localStorage.removeItem('fichaje_pin');
     State.pin    = null;
     State.nombre = null;
     State.estado = null;
@@ -458,15 +471,17 @@ const App = {
     document.getElementById('pinInput').value = '';
     document.getElementById('logoutBtn').style.display = 'none';
     showPage('page-login');
+    toast('Sesión cerrada. PIN eliminado del dispositivo.', '', 4000);
   },
 
   // ── CARGAR EMPLEADO (auto-login) ───────────────────────────
   async cargarEmpleado() {
     try {
       const resp = await apiGet({ accion: 'estado', pin: State.pin });
+
+      // PIN incorrecto (empleado eliminado/desactivado) → limpiar sesión
       if (!resp.ok) {
-        // FIX C1: limpiar sesión corrupta
-        sessionStorage.removeItem('fichaje_pin');
+        localStorage.removeItem('fichaje_pin');
         this.logout();
         return;
       }
@@ -486,9 +501,11 @@ const App = {
         setTimeout(() => this.ficharAutomatico(accion), 1000);
       }
     } catch (_) {
-      // FIX C1: limpiar sesión en error de red también
-      sessionStorage.removeItem('fichaje_pin');
-      this.logout();
+      // Error de red: NO borrar el PIN — puede ser temporal.
+      // La próxima vez que haya conexión se auto-logeará solo.
+      showPage('page-login');
+      document.getElementById('loginError').textContent = 'Sin conexión. El PIN sigue guardado en el dispositivo.';
+      document.getElementById('loginError').style.display = 'block';
     }
   },
 
