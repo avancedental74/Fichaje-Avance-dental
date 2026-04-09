@@ -26,6 +26,8 @@ const State = {
   turnos:       [],     // [{ entrada: 'HH:MM', salida: 'HH:MM' }, ...]
   relojTimer:   null,
   pollingTimer: null,
+  procesoActivo: false,      // Bloqueo para evitar peticiones duplicadas
+  ultimoFichajeAuto: 0,      // Timestamp del último fichaje automático
   dentroDelCentro: null  // null = desconocido, true/false cuando tengamos GPS
 };
 
@@ -232,6 +234,14 @@ function processGeoUpdate(lat, lng) {
     const debeSalida  = !dentro && State.estado === 'EN_JORNADA';
 
     if (debeEntrada || debeSalida) {
+      if (State.procesoActivo) return; // Ya hay uno en marcha
+      
+      const ahora = Date.now();
+      if (ahora - State.ultimoFichajeAuto < 300000) { // 5 minutos de "enfriamiento"
+         console.log('[Geo] Ignorando por periodo de enfriamiento (5 min)');
+         return;
+      }
+
       const accion = debeEntrada ? 'ENTRADA' : 'SALIDA';
       toast('📍 Ubicación detectada — Sincronizando fichaje...', '', 5000);
       setTimeout(() => App.ficharAutomatico(accion), 1500);
@@ -626,7 +636,8 @@ const App = {
   // Verifica de nuevo el estado antes de fichar para evitar duplicados
   // si el botón manual ya fichó mientras tanto.
   async ficharAutomatico(tipoEsperado) {
-    if (!State.pin) return;
+    if (!State.pin || State.procesoActivo) return;
+    State.procesoActivo = true;
 
     // Doble-check: releer estado del servidor antes de actuar
     try {
@@ -669,6 +680,7 @@ const App = {
         ultimaAccion: { tipo, hora: resp.data.hora }
       });
 
+      State.ultimoFichajeAuto = Date.now();
       const msg = tipo === 'ENTRADA'
         ? `✅ Entrada automática registrada a las ${resp.data.hora}`
         : `✅ Salida automática registrada a las ${resp.data.hora}`;
@@ -683,6 +695,8 @@ const App = {
     } catch (err) {
       toast('⚠️ Error en fichaje automático: ' + mensajeError(err), 'error', 5000);
       console.error('ficharAutomatico error:', err);
+    } finally {
+      State.procesoActivo = false;
     }
   },
 
