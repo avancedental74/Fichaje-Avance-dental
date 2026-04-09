@@ -4,7 +4,9 @@
   "description": "",
   "main": "admin.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build-sync": "copy *.html www\\ && copy *.js www\\ && copy *.css www\\ && copy *.json www\\ && copy *.png www\\ && npx cap sync android",
+    "open:android": "npx cap open android"
   },
   "keywords": [],
   "author": "",
