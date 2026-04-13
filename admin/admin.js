@@ -251,24 +251,30 @@ const Admin = {
       const { registros, total } = resp.data;
       AdminState.registros = registros;
 
-      // 3. Verificar si el día es especial (Vacaciones/Baja...)
+      // 3. Verificar si el día es especial (Vacaciones/Baja...) ──
       const bc = document.getElementById('bannerEspecialContenedor');
-      bc.innerHTML = ''; // Limpiar previo
-      if (idEmpleado) {
-        const respCal = await apiAdminGet({ accion: 'admin_calendario', pinAdmin: AdminState.pinAdmin, idEmpleado });
-        if (respCal.ok && respCal.data.calendario) {
-          const diaE = respCal.data.calendario.find(d => d.fecha === fecha);
-          if (diaE) {
-            bc.innerHTML = `
-              <div class="vacation-banner" style="margin-bottom:15px; border-style:dashed; background:rgba(255,167,38,0.05);">
-                <div class="vacation-icon">📅</div>
-                <div class="vacation-info">
-                  <strong style="color:var(--admin)">Día Especial: ${sanitizar(diaE.tipo)}</strong>
-                  <span>Este empleado tiene este día marcado en su calendario de ausencias.</span>
-                </div>
-              </div>
-            `;
+      if (bc) {
+        bc.innerHTML = ''; 
+        try {
+          if (idEmpleado) {
+            const respCal = await apiAdminGet({ accion: 'admin_calendario', pinAdmin: AdminState.pinAdmin, idEmpleado });
+            if (respCal && respCal.ok && respCal.data && respCal.data.calendario) {
+              const diaE = respCal.data.calendario.find(d => d.fecha === fecha);
+              if (diaE) {
+                bc.innerHTML = `
+                  <div class="vacation-banner" style="margin-bottom:15px; border-style:dashed; background:rgba(255,167,38,0.05);">
+                    <div class="vacation-icon">📅</div>
+                    <div class="vacation-info">
+                      <strong style="color:var(--admin)">Día Especial: ${sanitizar(diaE.tipo)}</strong>
+                      <span>Este empleado tiene este día marcado en su calendario de ausencias.</span>
+                    </div>
+                  </div>
+                `;
+              }
+            }
           }
+        } catch (errCal) {
+          console.warn("Fallo no crítico al cargar calendario:", errCal);
         }
       }
 
