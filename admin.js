@@ -380,7 +380,7 @@ const Admin = {
       const tdId = document.createElement('td');
       tdId.className = 'text-xs text-muted';
       tdId.style.fontFamily = 'monospace';
-      tdId.textContent = r.idRegistro.slice(0, 8) + '…';
+      tdId.textContent = (r.idRegistro ? r.idRegistro.toString().slice(0, 8) : '—') + '…';
 
       tr.appendChild(tdNombre);
       tr.appendChild(tdTipo);

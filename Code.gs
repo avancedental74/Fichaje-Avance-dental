@@ -739,11 +739,13 @@ function formatRegistro(fila) {
 }
 
 function formatFecha(date) {
+  if (!date || isNaN(new Date(date).getTime())) return "";
   const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
   return Utilities.formatDate(new Date(date), tz, "yyyy-MM-dd");
 }
 
 function formatHora(date) {
+  if (!date || isNaN(new Date(date).getTime())) return "";
   const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
   return Utilities.formatDate(new Date(date), tz, "HH:mm");
 }
@@ -829,7 +831,15 @@ function enviarPushRecordatorio(token, nombre, tipo, idEmpleado) {
 }
 
 function sumarMinutos(horaStr, mins) {
-  const [h, m] = horaStr.split(':').map(Number);
+  // Si es un objeto Date (común al leer de Google Sheets), lo pasamos a texto HH:mm
+  if (horaStr instanceof Date || (typeof horaStr !== 'string')) {
+    horaStr = formatHora(horaStr);
+  }
+  
+  const partes = String(horaStr).split(':');
+  if (partes.length < 2) return "00:00"; // Fallback de seguridad
+
+  const [h, m] = partes.map(Number);
   const date   = new Date();
   date.setHours(h, m + mins, 0, 0);
   return formatHora(date);
@@ -926,51 +936,4 @@ function accionBorrarEspecial(body) {
   return respErr('No se encontró el día especial para borrar');
 }
 
-// ── HELPERS FECHA/HORA ────────────────────────────────────────
-function formatFecha(d) {
-  if (!(d instanceof Date)) d = new Date(d);
-  return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
-}
-function formatHora(d) {
-  if (!(d instanceof Date)) d = new Date(d);
-  return Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm");
-}
-function normalizarFecha(val) {
-  if (!val) return "";
-  if (val instanceof Date) return formatFecha(val);
-  return String(val).split('T')[0];
-}
-function getRegistrosDia(idEmpleado, fecha) {
-  const hoja = getSheet(CONFIG.HOJAS.REGISTROS);
-  const datos = hoja.getDataRange().getValues();
-  const res = [];
-  for (let i = 1; i < datos.length; i++) {
-    if (datos[i][1] === idEmpleado && normalizarFecha(datos[i][6]) === fecha) {
-      res.push(formatRegistro(datos[i]));
-    }
-  }
-  return res;
-}
-function getUltimoRegistroDia(idEmpleado, fecha) {
-  const regs = getRegistrosDia(idEmpleado, fecha);
-  if (regs.length === 0) return null;
-  // Ya vienen ordenados si el excel está en orden, pero por si acaso:
-  regs.sort((a, b) => new Date(b.timestampServidor) - new Date(a.timestampServidor));
-  return regs[0];
-}
-function formatRegistro(fila) {
-  return {
-    id:        fila[0],
-    idEmp:      fila[1],
-    nombre:    fila[2],
-    tipo:      fila[3],
-    timestampServidor: fila[4],
-    timestamp: fila[5],
-    fecha:     fila[6],
-    hora:      formatHora(fila[4]),
-    lat:       fila[9],
-    lng:       fila[10],
-    obs:       fila[11],
-    sesionID:  fila[12]
-  };
-}
+// Fin del archivo - Limpieza de duplicados realizada.
