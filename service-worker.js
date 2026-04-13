@@ -228,72 +228,49 @@ async function comprobarGeoYFichar() {
     return;
   }
 
-  // Verificar si está dentro del radio del centro
-  const dist   = haversineMetros(lat, lng, GEO_LAT, GEO_LNG);
-  const dentro = dist <= GEO_RADIO;
+  // 1. Verificar distancia
+  const dist = haversineMetros(lat, lng, GEO_LAT, GEO_LNG);
+  
+  // MARGEN DE SEGURIDAD (igual que app.js)
+  const radioEntrada = GEO_RADIO;
+  const radioSalida  = GEO_RADIO + 100;
 
-  if (ventana.tipo === 'ENTRADA' && !dentro) {
-    // Aún no ha llegado — no fichar todavía
-    return;
-  }
-
-  if (ventana.tipo === 'SALIDA' && dentro) {
-    // Sigue dentro del centro en ventana de salida → recordatorio manual
-    await mostrarNotificacion(
-      '🔴 ¿Has olvidado fichar la salida?',
-      `${sw.nombre} — Sigues en el centro. Toca para registrar tu salida.`,
-      'SALIDA', lat, lng
-    );
-    return;
-  }
-
-  if (ventana.tipo === 'ENTRADA' && dentro) {
-    // Está dentro del centro en ventana de entrada → fichar directamente (igual que watchPosition)
-    const ok = await ficharDesdeSW(lat, lng, 'Fichaje automático Periodic Sync (ENTRADA)');
-    if (ok) {
-      sw.estado = 'EN_JORNADA';
-      await guardarEstadoEnIDB(sw.estado);
+  // 2. LÓGICA DE RECORDATORIOS (Proactiva para Android)
+  if (ventana.tipo === 'ENTRADA') {
+    if (dist <= radioEntrada) {
       await mostrarNotificacion(
-        '🟢 Entrada registrada',
-        `${sw.nombre} — Has fichado la entrada automáticamente ✅`,
-        null, lat, lng
-      );
-      const clients = await self.clients.matchAll({ type: 'window' });
-      clients.forEach(c => c.postMessage({ tipo: 'FICHAJE_AUTO_OK', accion: 'ENTRADA', hora: horaActual() }));
-    } else {
-      await mostrarNotificacion(
-        '⚠️ No se pudo fichar automáticamente',
-        `${sw.nombre} — toca para fichar manualmente`,
+        '🟢 ¿Quieres fichar la entrada?',
+        `${sw.nombre} — Ya estás en el centro. Toca para registrar tu entrada.`,
         'ENTRADA', lat, lng
       );
     }
     return;
   }
 
-  // Condiciones cumplidas → fichar automáticamente (SALIDA: empleado salió del centro)
-  const ok = await ficharDesdeSW(lat, lng, `Fichaje automático Periodic Sync (${ventana.tipo})`);
-  const emoji = ventana.tipo === 'ENTRADA' ? '🟢' : '🔴';
+  if (ventana.tipo === 'SALIDA') {
+    if (dist <= radioSalida) {
+      await mostrarNotificacion(
+        '🔴 ¿Has terminado tu jornada?',
+        `${sw.nombre} — Sigues en el centro. No olvides fichar tu salida.`,
+        'SALIDA', lat, lng
+      );
+    } else {
+      // Alejamiento confirmado -> Fichaje auto
+      await ficharDeFormaAutomatica('SALIDA', lat, lng);
+    }
+    return;
+  }
+}
 
+async function ficharDeFormaAutomatica(tipo, lat, lng) {
+  const ok = await ficharDesdeSW(lat, lng, `Fichaje auto por alejamiento (${tipo})`);
   if (ok) {
-    sw.estado = ventana.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+    sw.estado = (tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE');
     await guardarEstadoEnIDB(sw.estado);
     await mostrarNotificacion(
-      `${emoji} ${ventana.tipo === 'ENTRADA' ? 'Entrada registrada' : 'Salida registrada'}`,
-      `${sw.nombre} — ${ventana.tipo === 'ENTRADA' ? 'Has fichado la entrada' : 'Has fichado la salida'} automáticamente ✅`,
+      tipo === 'ENTRADA' ? '🟢 Entrada automática' : '🔴 Salida automática',
+      `${sw.nombre} — Has fichado automáticamente al salir ✅`,
       null, lat, lng
-    );
-    // Avisar a la app si está abierta para que refresque la UI
-    const clients = await self.clients.matchAll({ type: 'window' });
-    clients.forEach(c => c.postMessage({
-      tipo: 'FICHAJE_AUTO_OK',
-      accion: ventana.tipo,
-      hora: horaActual()
-    }));
-  } else {
-    await mostrarNotificacion(
-      `⚠️ No se pudo fichar automáticamente`,
-      `${sw.nombre} — toca para fichar manualmente`,
-      ventana.tipo, lat, lng
     );
   }
 }

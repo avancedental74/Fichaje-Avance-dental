@@ -736,11 +736,81 @@ function normalizarFecha(val) {
 }
 
 // ============================================================
-//  SETUP INICIAL — Ejecutar UNA SOLA VEZ manualmente
+//  SISTEMA DE RECORDATORIOS PROGRAMADOS (Para iOS y Olvidos)
 // ============================================================
-function setupInicial() {
+
+/**
+ * Esta función debe configurarse con un disparador (Trigger) 
+ * de Google Apps Script para que se ejecute cada 1 minuto.
+ */
+function procesarRecordatoriosProgramados() {
+  const ahoraStr = formatHora(new Date());
+  const hoyStr   = formatFecha(new Date());
+  const hojaEmp  = getSheet(CONFIG.HOJAS.EMPLEADOS);
+  const datosEmp = hojaEmp.getDataRange().getValues();
+
+  console.log(`[Cron] Ejecutando recordatorios para las ${ahoraStr}`);
+
+  for (let i = 1; i < datosEmp.length; i++) {
+    const [id, nombre, , activo, , , , , t1e, t1s, t2e, t2s, pushToken] = datosEmp[i];
+    if (!activo) continue;
+
+    const turnos = [];
+    if (t1e && t1s) turnos.push({ entrada: t1e, salida: t1s });
+    if (t2e && t2s) turnos.push({ entrada: t2e, salida: t2s });
+
+    const ultimoReg = getUltimoRegistroDia(id, hoyStr);
+    const estado    = !ultimoReg ? 'LIBRE' : (ultimoReg.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE');
+
+    for (const turno of turnos) {
+      // Recordatorio de ENTRADA (si pasa 1 min de su hora y sigue LIBRE)
+      if (estado === 'LIBRE' && ahoraStr === sumarMinutos(turno.entrada, 1)) {
+        enviarPushRecordatorio(pushToken, nombre, 'ENTRADA', id);
+      }
+      // Recordatorio de SALIDA (si pasa 1 min de su hora y sigue EN_JORNADA)
+      if (estado === 'EN_JORNADA' && ahoraStr === sumarMinutos(turno.salida, 1)) {
+        enviarPushRecordatorio(pushToken, nombre, 'SALIDA', id);
+      }
+    }
+  }
+}
+
+function enviarPushRecordatorio(token, nombre, tipo, idEmpleado) {
+  if (!token) {
+    console.warn(`[Push] El empleado ${nombre} no tiene token activo.`);
+    return;
+  }
+  
+  const titulo  = tipo === 'ENTRADA' ? '🟢 ¿Vas a entrar?' : '🔴 ¿Has terminado?';
+  const mensaje = `${nombre}, es tu hora de fichar la ${tipo.toLowerCase()}. ¡No te olvides!`;
+  
+  // Aquí usamos el sistema de Alertas para que el admin lo vea también
+  accionAlertaNoFichaje({
+    pin: 'SISTEMA', // bypass para log interno
+    idEmpleado: idEmpleado,
+    turnoEntrada: tipo,
+    minutosRetraso: 1,
+    timestampCliente: new Date().toISOString()
+  }, 'SERVIDOR');
+
+  console.log(`[Push] Enviando aviso de ${tipo} a ${nombre}...`);
+  // Nota: Para enviar notificaciones reales a iOS/PWA se requiere 
+  // un servicio de relay Web-Push o Firebase FCM.
+  // Por ahora lo dejamos registrado en la hoja de ALERTAS para auditoría.
+}
+
+function sumarMinutos(horaStr, mins) {
+  const [h, m] = horaStr.split(':').map(Number);
+  const date   = new Date();
+  date.setHours(h, m + mins, 0, 0);
+  return formatHora(date);
+}
+
+// Re-emplazamos setupInicial para incluir el trigger y las hojas si no existen
+function setupFinal() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
 
+  // 1. Crear hojas si no existen
   ['Empleados', 'Registros', 'Auditoria', 'Alertas'].forEach(nombre => {
     if (!ss.getSheetByName(nombre)) {
       const h = ss.insertSheet(nombre);
@@ -748,9 +818,24 @@ function setupInicial() {
     }
   });
 
-  // Empleado de prueba — bórralo después de probar
-  const hEmpleados = ss.getSheetByName('Empleados');
-  hEmpleados.appendRow(['EMP001', 'Empleado Demo', '1111', true, new Date(), 'demo@avancedental.com', '00000000T', 'Auxiliar', '09:00', '14:00', '16:00', '20:00']);
+  // 2. Borrar triggers previos para no duplicar
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(t => {
+    if (t.getHandlerFunction() === 'procesarRecordatoriosProgramados') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
 
-  Logger.log('✅ Setup completado. Empleado demo PIN: 1111 | Admin PIN: ' + CONFIG.PIN_ADMIN);
+  // 3. Crear disparador cada minuto
+  ScriptApp.newTrigger('procesarRecordatoriosProgramados')
+           .timeBased()
+           .everyMinutes(1)
+           .create();
+           
+  console.log('✅ Sistema COMPLETADO: Hojas verificadas y Recordatorios activados cada 1 min.');
+}
+
+function setupInicial() {
+  // Mantenemos esta función por compatibilidad si se llama manualmente
+  setupFinal();
 }

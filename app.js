@@ -421,14 +421,15 @@ const App = {
       navigator.serviceWorker.addEventListener('message', onMensajeSW);
     }
 
-    // ¿Venimos de una notificación con autofichar pendiente?
+    // ¿Venimos de una notificación con fichaje pendiente?
     const params      = new URLSearchParams(window.location.search);
-    const autofichar  = params.get('autofichar');
-    if (autofichar) {
-      // Limpiar el parámetro de la URL sin recargar
+    const trigger     = params.get('autofichar') || params.get('trigger');
+    if (trigger) {
+      console.log('[App] Fichaje pendiente desde notificación:', trigger);
+      // Limpiar URL sin recargar
       history.replaceState({}, '', window.location.pathname);
-      // Se fichará automáticamente tras cargar la sesión (ver cargarEmpleado)
-      State._autoficharPendiente = autofichar;
+      // Se ejecutará tras cargar la sesión
+      State._autoficharPendiente = trigger;
     }
 
     const pinGuardado = localStorage.getItem('fichaje_pin');
