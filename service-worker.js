@@ -1,32 +1,30 @@
 // ============================================================
-//  FICHAJE LABORAL — service-worker.js  v5.0
-//  · Cache First para estáticos / Network Only para API
-//  · Geofencing en background (Android) — puente con app.js
-//  · Notificación push con acción directa de fichaje
-//  · Periodic Background Sync con ventanas de horario por empleado
-//  · Solo activo Lunes–Viernes, dentro de ventanas de turno
+//  FICHAJE LABORAL — service-worker.js  v6.0
+//  Scope: /Fichaje-Avance-dental/
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-v4.0-final';
+const CACHE_NAME    = 'fichaje-global-v6.0';
 const STATIC_ASSETS = [
-  './index.html', './admin.html', './styles.css',
-  './app.js', './admin.js', './manifest.json',
-  './icon-192.png', './icon-512.png',
+  './index.html', 
+  './admin.html', 
+  './styles.css',
+  './app.js', 
+  './admin.js', 
+  './manifest.json',
+  './manifest-admin.json',
+  './icon-192.png', 
+  './admin-icon-192.png',
   'https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap'
 ];
 
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzteKSPNkGofqBCWZv7OjkJQ0-AVRXSKrCFHwbIUMgUdTdFsnD_ciWKFnfpN20u0N7qxg/exec';
 
-// ── Estado interno del SW ─────────────────────────────────────
-let sw = {
-  pin:    null,
-  nombre: null,
-  estado: null,   // 'LIBRE' | 'EN_JORNADA'
-  turnos: []      // [{ entrada: 'HH:MM', salida: 'HH:MM' }, ...]
-};
+// ── Status internal SW ─────────────────────────────────────
+let sw = { pin: null, nombre: null, estado: null, turnos: [] };
 
 // ── INSTALL ──────────────────────────────────────────────────
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
       Promise.allSettled(
@@ -34,20 +32,19 @@ self.addEventListener('install', event => {
           cache.add(url).catch(e => console.warn('[SW] No cacheable:', url, e))
         )
       )
-    ).then(() => self.skipWaiting())
+    )
   );
 });
 
 // ── ACTIVATE ─────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
-      .then(() => {
-        self.clients.claim();
-        // Registrar Periodic Background Sync si el navegador lo soporta
-        registrarPeriodicSync();
-      })
+    caches.keys().then(keys => Promise.all(
+      keys.map(k => { if (k !== CACHE_NAME) return caches.delete(k); })
+    )).then(() => {
+      self.clients.claim();
+      registrarPeriodicSync();
+    })
   );
 });
 
@@ -55,23 +52,40 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
-  if (request.method !== 'GET') return;
-  if (url.hostname.includes('script.google.com')) return;
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(staleWhileRevalidate(request)); return;
+
+  if (request.method !== 'GET' || url.hostname.includes('script.google.com')) return;
+
+  // ESTRATEGIA: Network First para archivos de ADMIN (para asegurar actualizaciones)
+  if (url.pathname.includes('admin.html') || url.pathname.includes('admin.js')) {
+    event.respondWith(networkFirst(request));
+  } else {
+    // Cache First para el resto (app de trabajadores, iconos, fuentes)
+    event.respondWith(cacheFirst(request));
   }
-  event.respondWith(cacheFirst(request));
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const fresh = await fetch(req);
+    if (fresh.ok) cache.put(req, fresh.clone());
+    return fresh;
+  } catch (e) {
+    const cached = await cache.match(req);
+    return cached || new Response('Sin conexión', { status: 503 });
+  }
+}
 
 async function cacheFirst(req) {
   const cached = await caches.match(req);
   if (cached) return cached;
+  const cache = await caches.open(CACHE_NAME);
   try {
-    const net = await fetch(req);
-    if (net.ok) { const c = await caches.open(CACHE_NAME); c.put(req, net.clone()); }
-    return net;
-  } catch (_) {
-    if (req.destination === 'document') return await caches.match('./index.html') || new Response('Sin conexión', { status: 503 });
+    const fresh = await fetch(req);
+    if (fresh.ok) cache.put(req, fresh.clone());
+    return fresh;
+  } catch (e) {
+    if (req.destination === 'document') return await caches.match('./index.html');
     return new Response('Sin conexión', { status: 503 });
   }
 }
