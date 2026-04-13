@@ -169,15 +169,18 @@ const Admin = {
   inicializar(empleados) {
     document.getElementById('filtroFecha').value = fechaHoy();
 
-    const sel = document.getElementById('filtroEmpleado');
-    sel.innerHTML = '<option value="">Todos los empleados</option>';
-    empleados.filter(e => e.activo).forEach(e => {
-      // FIX XSS: usar createElement para que el nombre nunca se interprete como HTML
-      const opt = document.createElement('option');
-      opt.value       = e.id;
-      opt.textContent = e.nombre;
-      sel.appendChild(opt);
-    });
+    const selC = document.getElementById('calEmpleado');
+    if (selC) {
+      selC.innerHTML = '<option value="">Selecciona un empleado...</option>';
+      empleados.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = e.id;
+        opt.textContent = e.nombre;
+        selC.appendChild(opt);
+      });
+      // Listener para cargar calendario automático al cambiar empleado
+      selC.onchange = () => this.cargarCalendario();
+    }
 
     this.consultarRegistros();
     this.consultarAbiertos();
@@ -195,15 +198,16 @@ const Admin = {
     AdminState.tabActual = tab;
 
     document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-      const tabs = ['registros', 'abiertos', 'empleados'];
+      const tabs = ['registros', 'abiertos', 'empleados', 'calendario'];
       btn.classList.toggle('active', tabs[i] === tab);
     });
 
     document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
     document.getElementById(`tab-${tab}`).style.display = '';
 
-    if (tab === 'abiertos')  this.consultarAbiertos();
-    if (tab === 'empleados') this.cargarEmpleados();
+    if (tab === 'abiertos')   this.consultarAbiertos();
+    if (tab === 'empleados')  this.cargarEmpleados();
+    if (tab === 'calendario') this.cargarCalendario();
   },
 
   // ── REGISTROS ──────────────────────────────────────────────
@@ -227,6 +231,27 @@ const Admin = {
 
       const { registros, total } = resp.data;
       AdminState.registros = registros;
+
+      // 3. Verificar si el día es especial (Vacaciones/Baja...)
+      const bc = document.getElementById('bannerEspecialContenedor');
+      bc.innerHTML = ''; // Limpiar previo
+      if (idEmpleado) {
+        const respCal = await apiAdminGet({ accion: 'admin_calendario', pinAdmin: AdminState.pinAdmin, idEmpleado });
+        if (respCal.ok && respCal.data.calendario) {
+          const diaE = respCal.data.calendario.find(d => d.fecha === fecha);
+          if (diaE) {
+            bc.innerHTML = `
+              <div class="vacation-banner" style="margin-bottom:15px; border-style:dashed; background:rgba(255,167,38,0.05);">
+                <div class="vacation-icon">📅</div>
+                <div class="vacation-info">
+                  <strong style="color:var(--admin)">Día Especial: ${sanitizar ? sanitizar(diaE.tipo) : diaE.tipo}</strong>
+                  <span>Este empleado tiene este día marcado en su calendario de ausencias.</span>
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
 
       const entradas = registros.filter(r => r.tipo === 'ENTRADA').length;
       const salidas  = registros.filter(r => r.tipo === 'SALIDA').length;
@@ -739,6 +764,113 @@ const Admin = {
     URL.revokeObjectURL(url);
 
     toast(`CSV exportado: ${registros.length} registros`, 'success');
+  },
+
+  // ── CALENDARIO ──────────────────────────────────────────────
+  async guardarCalendario() {
+    const idEmpleado = document.getElementById('calEmpleado').value;
+    const fecha      = document.getElementById('calFecha').value;
+    const tipo       = document.getElementById('calTipo').value;
+
+    if (!idEmpleado || !fecha || !tipo) {
+      toast('Rellena todos los campos del calendario', 'error');
+      return;
+    }
+
+    try {
+      const resp = await apiPost({
+        accion: 'admin_guardar_especial',
+        pinAdmin: AdminState.pinAdmin,
+        idEmpleado,
+        fecha,
+        tipo
+      });
+
+      if (resp.ok) {
+        toast('Día especial guardado correctamente', 'success');
+        this.cargarCalendario();
+      } else {
+        toast(resp.error || 'Error al guardar', 'error');
+      }
+    } catch (err) {
+      toast(mensajeError(err), 'error');
+    }
+  },
+
+  async cargarCalendario() {
+    const idEmpleado = document.getElementById('calEmpleado').value;
+    const lista      = document.getElementById('listaCalendario');
+    
+    if (!idEmpleado) {
+      lista.innerHTML = '<div class="empty-state">Selecciona un empleado para ver su calendario.</div>';
+      return;
+    }
+
+    lista.innerHTML = '<div class="loading-overlay"><div class="loader"></div><span>Cargando calendario...</span></div>';
+
+    try {
+      const resp = await apiAdminGet({
+        accion: 'admin_calendario',
+        pinAdmin: AdminState.pinAdmin,
+        idEmpleado
+      });
+
+      if (!resp.ok) {
+        lista.innerHTML = '<div class="empty-state">Error al cargar calendario.</div>';
+        return;
+      }
+
+      const dias = resp.data.calendario || [];
+      if (!dias.length) {
+        lista.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div>No hay días especiales para este empleado.</div>';
+        return;
+      }
+
+      // Ordenar por fecha (descendente)
+      dias.sort((a,b) => b.fecha.localeCompare(a.fecha));
+
+      lista.innerHTML = dias.map((d, i) => `
+        <div class="registro-item" style="animation-delay:${i * 40}ms">
+          <div class="registro-icon" style="background:var(--admin-dim); color:var(--admin)">📅</div>
+          <div class="registro-info">
+            <div class="registro-tipo">${typeof sanitizar !== 'undefined' ? sanitizar(d.tipo) : d.tipo}</div>
+            <div class="registro-fecha">${formatFechaLegible(d.fecha)}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="Admin.borrarCalendario('${d.fecha}', '${idEmpleado}')">🗑️</button>
+        </div>
+      `).join('');
+
+    } catch (err) {
+      lista.innerHTML = `<div class="empty-state">${mensajeError(err)}</div>`;
+    }
+  },
+
+  async borrarCalendario(fecha, idEmpleado) {
+    const confirmado = await this._confirmar(
+      '¿Borrar día especial?',
+      `Se eliminará el registro del día ${formatFechaLegible(fecha)}.`,
+      'Borrar',
+      'btn-danger'
+    );
+    if (!confirmado) return;
+
+    try {
+      const resp = await apiPost({
+        accion: 'admin_borrar_especial',
+        pinAdmin: AdminState.pinAdmin,
+        idEmpleado,
+        fecha
+      });
+
+      if (resp.ok) {
+        toast('Día eliminado', 'success');
+        this.cargarCalendario();
+      } else {
+        toast(resp.error || 'No se pudo eliminar', 'error');
+      }
+    } catch (err) {
+      toast(mensajeError(err), 'error');
+    }
   }
 
 };
