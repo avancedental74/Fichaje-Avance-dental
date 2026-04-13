@@ -13,7 +13,8 @@ const CONFIG = {
     EMPLEADOS: 'Empleados',
     REGISTROS: 'Registros',
     AUDITORIA: 'Auditoria',
-    ALERTAS:   'Alertas'
+    ALERTAS:   'Alertas',
+    CALENDARIO: 'Calendario'
   }
 };
 
@@ -66,6 +67,9 @@ function inicializarHoja(hoja, nombre) {
     [CONFIG.HOJAS.ALERTAS]: [
       'ID_Alerta','ID_Empleado','Nombre_Empleado','Turno_Entrada',
       'Minutos_Retraso','Timestamp_Cliente','Timestamp_Servidor','Resuelta'
+    ],
+    [CONFIG.HOJAS.CALENDARIO]: [
+      'ID_Empleado','Fecha','Tipo','Observaciones'
     ]
   };
   if (headers[nombre]) {
@@ -161,6 +165,9 @@ function doPost(e) {
       case 'admin_nuevo_empleado':    return jsonResponse(accionNuevoEmpleado(body));
       case 'admin_editar_empleado':   return jsonResponse(accionEditarEmpleado(body));
       case 'admin_toggle_empleado':   return jsonResponse(accionToggleEmpleado(body));
+      case 'admin_calendario':        return jsonResponse(accionAdminCalendario(body));
+      case 'admin_guardar_especial':  return jsonResponse(accionGuardarEspecial(body));
+      case 'admin_borrar_especial':   return jsonResponse(accionBorrarEspecial(body));
       case 'guardar_token':           return jsonResponse(accionGuardarToken(body));
 
       case 'bootstrap_admin':         return jsonResponse(respErr('No necesario en esta versión'));
@@ -310,20 +317,18 @@ function accionEstado(params) {
   const hoyStr    = formatFecha(new Date());
   const ultimoReg = getUltimoRegistroDia(empleado.id, hoyStr);
   const histHoy   = getRegistrosDia(empleado.id, hoyStr);
+  const especial  = getDiaEspecial(empleado.id, hoyStr);
 
-  // FIX: JORNADA_CERRADA solo cuando el último tipo del día es SALIDA.
-  // Si no hay registro hoy → LIBRE (puede fichar entrada).
-  // Si el último es ENTRADA → EN_JORNADA (debe fichar salida).
-  // Si el último es SALIDA  → LIBRE (puede fichar otra entrada, jornada partida).
   const estado = !ultimoReg
     ? 'LIBRE'
     : ultimoReg.tipo === 'ENTRADA'
       ? 'EN_JORNADA'
-      : 'LIBRE';   // ← FIX: era 'JORNADA_CERRADA', ahora es LIBRE para permitir jornada partida y que el botón sea correcto
+      : 'LIBRE';
 
   return respOk({
     nombre: empleado.nombre,
     estado,
+    especial, // NUEVO: { tipo: 'VACACIONES', obs: '...' }
     turnos: empleado.turnos,
     ultimaAccion: ultimoReg ? {
       tipo:      ultimoReg.tipo,
@@ -332,6 +337,24 @@ function accionEstado(params) {
     } : null,
     registrosHoy: histHoy
   });
+}
+
+function getDiaEspecial(idEmpleado, fecha) {
+  try {
+    const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    const hoja = ss.getSheetByName(CONFIG.HOJAS.CALENDARIO);
+    if (!hoja) return null;
+    
+    const datos = hoja.getDataRange().getValues();
+    for (let i = 1; i < datos.length; i++) {
+       const rowId    = String(datos[i][0]).trim();
+       const rowFecha = normalizarFecha(datos[i][1]);
+       if (rowId === String(idEmpleado).trim() && rowFecha === fecha) {
+         return { tipo: datos[i][2], obs: datos[i][3] };
+       }
+    }
+  } catch(e) {}
+  return null;
 }
 
 // ── Historial personal ────────────────────────────────────────
@@ -755,6 +778,12 @@ function procesarRecordatoriosProgramados() {
     const [id, nombre, , activo, , , , , t1e, t1s, t2e, t2s, pushToken] = datosEmp[i];
     if (!activo) continue;
 
+    // SI ESTÁ DE VACACIONES/BAJA, SALTAMOS A ESTE EMPLEADO
+    if (getDiaEspecial(id, hoyStr)) {
+      console.log(`[Cron] ${nombre} está de día especial. Ignorando avisos.`);
+      continue;
+    }
+
     const turnos = [];
     if (t1e && t1s) turnos.push({ entrada: t1e, salida: t1s });
     if (t2e && t2s) turnos.push({ entrada: t2e, salida: t2s });
@@ -811,7 +840,7 @@ function setupFinal() {
   const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
 
   // 1. Crear hojas si no existen
-  ['Empleados', 'Registros', 'Auditoria', 'Alertas'].forEach(nombre => {
+  [CONFIG.HOJAS.EMPLEADOS, CONFIG.HOJAS.REGISTROS, CONFIG.HOJAS.AUDITORIA, CONFIG.HOJAS.ALERTAS, CONFIG.HOJAS.CALENDARIO].forEach(nombre => {
     if (!ss.getSheetByName(nombre)) {
       const h = ss.insertSheet(nombre);
       inicializarHoja(h, nombre);
@@ -838,4 +867,110 @@ function setupFinal() {
 function setupInicial() {
   // Mantenemos esta función por compatibilidad si se llama manualmente
   setupFinal();
+}
+
+// ============================================================
+//  ACCIONES CALENDARIO (ADMIN)
+// ============================================================
+
+function accionAdminCalendario(body) {
+  if (!verificarAdmin(body.pinAdmin)) return respErr('No autorizado');
+  const { idEmpleado } = body;
+  const ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  const hoja = ss.getSheetByName(CONFIG.HOJAS.CALENDARIO);
+  if (!hoja) return respOk({ calendario: [] });
+  
+  const datos = hoja.getDataRange().getValues();
+  const res = [];
+  for (let i = 1; i < datos.length; i++) {
+    const rowId = String(datos[i][0]).trim();
+    if (!idEmpleado || rowId === String(idEmpleado).trim()) {
+      res.push({
+        idEmpleado: rowId,
+        fecha: formatFecha(new Date(datos[i][1])),
+        tipo:  datos[i][2],
+        obs:   datos[i][3]
+      });
+    }
+  }
+  return respOk({ calendario: res });
+}
+
+function accionGuardarEspecial(body) {
+  if (!verificarAdmin(body.pinAdmin)) return respErr('No autorizado');
+  const { idEmpleado, fecha, tipo, obs } = body;
+  if (!idEmpleado || !fecha || !tipo) return respErr('Faltan campos obligatorios');
+  const hoja = getSheet(CONFIG.HOJAS.CALENDARIO);
+  hoja.appendRow([idEmpleado, new Date(fecha), tipo, obs || '']);
+  auditLog('CALENDARIO_MOD', 'ADMIN', { idEmpleado, fecha, tipo }, '');
+  return respOk('Día especial guardado');
+}
+
+function accionBorrarEspecial(body) {
+  if (!verificarAdmin(body.pinAdmin)) return respErr('No autorizado');
+  const { idEmpleado, fecha } = body;
+  if (!idEmpleado || !fecha) return respErr('Faltan datos para el borrado');
+  
+  const hoja = getSheet(CONFIG.HOJAS.CALENDARIO);
+  const datos = hoja.getDataRange().getValues();
+  
+  for (let i = datos.length - 1; i >= 1; i--) {
+    const rowId    = String(datos[i][0]).trim();
+    const rowFecha = normalizarFecha(datos[i][1]);
+    if (rowId === String(idEmpleado).trim() && rowFecha === fecha) {
+      hoja.deleteRow(i + 1);
+      auditLog('CALENDARIO_DEL', 'ADMIN', { idEmpleado, fecha }, '');
+      return respOk('Día eliminado del calendario');
+    }
+  }
+  return respErr('No se encontró el día especial para borrar');
+}
+
+// ── HELPERS FECHA/HORA ────────────────────────────────────────
+function formatFecha(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
+}
+function formatHora(d) {
+  if (!(d instanceof Date)) d = new Date(d);
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm");
+}
+function normalizarFecha(val) {
+  if (!val) return "";
+  if (val instanceof Date) return formatFecha(val);
+  return String(val).split('T')[0];
+}
+function getRegistrosDia(idEmpleado, fecha) {
+  const hoja = getSheet(CONFIG.HOJAS.REGISTROS);
+  const datos = hoja.getDataRange().getValues();
+  const res = [];
+  for (let i = 1; i < datos.length; i++) {
+    if (datos[i][1] === idEmpleado && normalizarFecha(datos[i][6]) === fecha) {
+      res.push(formatRegistro(datos[i]));
+    }
+  }
+  return res;
+}
+function getUltimoRegistroDia(idEmpleado, fecha) {
+  const regs = getRegistrosDia(idEmpleado, fecha);
+  if (regs.length === 0) return null;
+  // Ya vienen ordenados si el excel está en orden, pero por si acaso:
+  regs.sort((a, b) => new Date(b.timestampServidor) - new Date(a.timestampServidor));
+  return regs[0];
+}
+function formatRegistro(fila) {
+  return {
+    id:        fila[0],
+    idEmp:      fila[1],
+    nombre:    fila[2],
+    tipo:      fila[3],
+    timestampServidor: fila[4],
+    timestamp: fila[5],
+    fecha:     fila[6],
+    hora:      formatHora(fila[4]),
+    lat:       fila[9],
+    lng:       fila[10],
+    obs:       fila[11],
+    sesionID:  fila[12]
+  };
 }

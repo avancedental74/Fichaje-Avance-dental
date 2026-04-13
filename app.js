@@ -192,7 +192,8 @@ function iniciarGeofencing() {
 }
 
 function verificarNecesidadGps() {
-  if (!esDiaLaboral() || !State.pin) {
+  // REGLA DE PRIVACIDAD: Si hoy es vacaciones/festivo, apagamos GPS y avisos.
+  if (State.especial || !esDiaLaboral() || !State.pin) {
     if (_geoInicializado) detenerGeofencing();
     return;
   }
@@ -674,9 +675,10 @@ const App = {
 
   // ── RENDER ESTADO ──────────────────────────────────────────
   renderEstado(data) {
-    const { estado, nombre, ultimaAccion } = data;
-    State.estado = estado;
-    notificarEstadoSW(); // ← mantener SW sincronizado con el estado real
+    const { estado, nombre, ultimaAccion, especial } = data;
+    State.estado   = estado;
+    State.especial = especial; // Guardar estado de día libre
+    notificarEstadoSW();
 
     const iconEl = document.getElementById('statusIcon');
     iconEl.className = 'status-icon ' +
@@ -688,6 +690,30 @@ const App = {
     document.getElementById('statusNombre').textContent = nombre;
     document.getElementById('statusLabel').textContent =
       estado === 'EN_JORNADA' ? 'En jornada' : 'Libre — listo para fichar';
+
+    // MOSTRAR BANNER DE VACACIONES SI APLICA
+    const headerStatus = document.querySelector('.header-status');
+    const existingBanner = document.getElementById('vacation-banner-ui');
+    if (existingBanner) existingBanner.remove();
+
+    if (State.especial) {
+      const banner = document.createElement('div');
+      banner.id = 'vacation-banner-ui';
+      banner.className = 'vacation-banner animate__animated animate__heartBeat';
+      banner.innerHTML = `
+        <div class="vacation-icon">🏝️</div>
+        <div class="vacation-info">
+          <strong>¡Disfruta de tu descanso!</strong>
+          <span>Hoy es ${State.especial.tipo.toLowerCase()}</span>
+        </div>
+      `;
+      headerStatus.appendChild(banner);
+      
+      // Bloquear botones
+      document.getElementById('fichajeBtn').disabled = true;
+      document.getElementById('fichajeSubtexto').textContent = `Día especial: ${especial.tipo}`;
+      return;
+    }
 
     const uaEl = document.getElementById('ultimaAccion');
     if (ultimaAccion) {

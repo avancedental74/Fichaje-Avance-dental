@@ -315,6 +315,10 @@
               onclick="Admin.switchTab('empleados')" id="tab-btn-empleados">
         👥 Empleados
       </button>
+      <button class="tab-btn" role="tab" aria-selected="false"
+              onclick="Admin.switchTab('calendario')" id="tab-btn-calendario">
+        📅 Calendario
+      </button>
     </nav>
 
     <!-- ── TAB: REGISTROS ──────────────────────────────── -->
@@ -366,6 +370,8 @@
           📊 Excel
         </button>
       </div>
+
+      <div id="bannerEspecialContenedor" style="padding:0 var(--s2) var(--s1);"></div>
 
       <!-- Tabla -->
       <div style="padding:0 var(--s2) var(--s2); overflow-y:auto; flex:1;
@@ -446,6 +452,52 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── TAB: CALENDARIO ─────────────────────────────── -->
+    <div id="tab-calendario" class="tab-content" style="display:none;"
+         role="tabpanel" aria-labelledby="tab-btn-calendario">
+      <div style="padding:var(--s3);">
+        <div class="section-title">Gestión de Vacaciones y Días Libres</div>
+        
+        <!-- Formulario rápido -->
+        <div class="card" style="margin-bottom:20px;">
+          <div style="display:grid; grid-template-columns:1fr; gap:12px;">
+            <div class="input-group">
+              <label class="input-label">Empleado</label>
+              <select class="input-field" id="calEmpleado">
+                <option value="">Selecciona un empleado...</option>
+              </select>
+            </div>
+            
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div class="input-group">
+                <label class="input-label">Día</label>
+                <input type="date" class="input-field" id="calFecha">
+              </div>
+              <div class="input-group">
+                <label class="input-label">Tipo</label>
+                <select class="input-field" id="calTipo">
+                  <option value="VACACIONES">🏝️ Vacaciones</option>
+                  <option value="BAJA">🤒 Baja Médica</option>
+                  <option value="FESTIVO">🇪🇸 Festivo</option>
+                  <option value="DESCENSO">🛌 Día Libre</option>
+                  <option value="OTRO">📝 Otros</option>
+                </select>
+              </div>
+            </div>
+
+            <button class="btn btn-primary btn-full mt-2" onclick="Admin.guardarCalendario()">
+              Añadir al calendario
+            </button>
+          </div>
+        </div>
+
+        <div class="section-title">Próximos días especiales</div>
+        <div id="listaCalendario">
+          <div class="empty-state">Selecciona un empleado para ver su calendario.</div>
+        </div>
       </div>
     </div>
 
