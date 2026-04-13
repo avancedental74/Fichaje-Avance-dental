@@ -170,19 +170,32 @@ function iniciarGeofencing() {
     console.log('[Native] Comprobando permisos...');
     
     // Función para intentar saltar a los ajustes si falta permiso
-    const forzarPermisos = async () => {
+    const comprobarYForzarPermisos = async () => {
       try {
         const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
-        // mostramos el aviso visual por si acaso
+        // En Capacitor, podemos intentar checkPermissions
+        const status = await BackgroundGeolocation.checkPermissions();
+        
+        // Si ya está todo OK, ocultamos el aviso
+        if (status.location === 'granted') {
+           document.getElementById('bgPermissionAlert').style.display = 'none';
+        } else {
+           document.getElementById('bgPermissionAlert').style.display = 'block';
+           // Si el usuario ya dio "mientras se usa", le forzamos a Ajustes
+           await BackgroundGeolocation.requestPermissions();
+        }
+      } catch (e) { 
+        console.warn('Error comprobando permisos:', e);
+        // Fallback: mostrar aviso si hay dudas
         document.getElementById('bgPermissionAlert').style.display = 'block';
-        // Esto abrirá el pop-up nativo de permisos. 
-        // En Android 11+, si el usuario ya dio "mientras se usa", 
-        // esto debería llevarle a la pantalla de Ajustes.
-        await BackgroundGeolocation.requestPermissions();
-      } catch (e) { console.warn(e); }
+      }
     };
     
-    forzarPermisos();
+    comprobarYForzarPermisos();
+    // Re-comprobar cada vez que la app vuelve al primer plano (al volver de Ajustes)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) comprobarYForzarPermisos();
+    });
     console.log('[Native] Activando BackgroundGeolocation nativo...');
     try {
       const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
@@ -238,33 +251,25 @@ function iniciarGeofencing() {
 function processGeoUpdate(lat, lng) {
   if (!esDiaLaboral()) return;
 
-  const dist   = haversineMetros(lat, lng, GEO.lat, GEO.lng);
-  const dentro = dist <= GEO.radioMetros;
+  const dist = haversineMetros(lat, lng, GEO.lat, GEO.lng);
+
+  // --- SEGURIDAD ANTI-REBOTE (Hysteresis) ---
+  // Si estamos dentro, usamos el radio normal (150m).
+  // Si queremos detectar que ha SALIDO, pedimos que se aleje un poco más (250m).
+  // Esto evita que fluctuaciones del GPS en el borde fichen salida/entrada sin parar.
+  const radioEntrada = GEO.radioMetros;
+  const radioSalida  = GEO.radioMetros + 100; // 250m para confirmar salida
+
+  let dentro;
+  if (State.dentroDelCentro === true) {
+    // Si ya estábamos dentro, solo somos "fuera" si superamos el radio de salida
+    dentro = dist <= radioSalida;
+  } else {
+    // Si estábamos fuera, somos "dentro" si entramos en el radio de entrada
+    dentro = dist <= radioEntrada;
+  }
 
   actualizarGeoBanner(dentro, Math.round(dist));
-
-  if (!_geoInicializado) {
-    _geoInicializado      = true;
-    State.dentonDelCentro = dentro;
-
-    const debeEntrada = dentro  && State.estado === 'LIBRE';
-    const debeSalida  = !dentro && State.estado === 'EN_JORNADA';
-
-    if (debeEntrada || debeSalida) {
-      if (State.procesoActivo) return; // Ya hay uno en marcha
-      
-      const ahora = Date.now();
-      if (ahora - State.ultimoFichajeAuto < 300000) { // 5 minutos de "enfriamiento"
-         console.log('[Geo] Ignorando por periodo de enfriamiento (5 min)');
-         return;
-      }
-
-      const accion = debeEntrada ? 'ENTRADA' : 'SALIDA';
-      toast('📍 Ubicación detectada — Sincronizando fichaje...', '', 5000);
-      setTimeout(() => App.ficharAutomatico(accion), 1500);
-    }
-    return;
-  }
 
   if (dentro === State.dentroDelCentro) return;
   State.dentroDelCentro = dentro;
@@ -430,7 +435,40 @@ const App = {
     if (pinGuardado) {
       State.pin = pinGuardado;
       this.cargarEmpleado();
+      this.comprobarPush();
     }
+  },
+
+  comprobarPush() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') {
+      const prompt = document.getElementById('pushPrompt');
+      if (prompt) prompt.style.display = 'block';
+    }
+  },
+
+  async activarNotificaciones() {
+    if (!('Notification' in window)) {
+      toast('⚠️ Tu móvil no soporta notificaciones web', 'error');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      document.getElementById('pushPrompt').style.display = 'none';
+      toast('✅ Recordatorios activados', 'success');
+      
+      // Sincronizar el permiso con el servidor
+      this.guardarTokenEnServidor('notificaciones_activas');
+    } else {
+      toast('⚠️ Notificaciones bloqueadas', 'error');
+    }
+  },
+
+  async guardarTokenEnServidor(token) {
+     if (!State.pin) return;
+     try {
+       await apiPost({ accion: 'guardar_token', pin: State.pin, token: token });
+     } catch(e) { console.warn('Error guardando token'); }
   },
 
   // ── LOGIN ──────────────────────────────────────────────────
@@ -614,19 +652,14 @@ const App = {
 
     try {
       const resp = await apiPost({ accion: 'fichar', pin: State.pin, latitud, longitud });
-      loader.style.display = 'none';
-
       if (!resp.ok) {
         toast(resp.error || 'No se pudo registrar el fichaje', 'error');
-        btn.disabled = false;
-        this.renderEstado({ estado: State.estado, nombre: State.nombre });
         return;
       }
 
-      // ACTUALIZAR ESTADO INMEDIATAMENTE con la respuesta
       const tipo = resp.data.tipo;
-      // Tras una SALIDA el estado vuelve a LIBRE (jornada partida permitida)
       const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
+      
       this.renderEstado({
         estado: nuevoEstado,
         nombre: State.nombre,
@@ -635,19 +668,20 @@ const App = {
 
       this.mostrarConfirm(resp.data);
 
-      // Refrescar del servidor después de un delay para confirmar.
-      // 8 s de espera: Apps Script puede tardar hasta 8-15 s en propagar un appendRow.
       setTimeout(() => {
         this.refrescarEstadoConGuardia(nuevoEstado);
         this.cargarHistorial();
       }, 8000);
 
     } catch (err) {
-      loader.style.display = 'none';
-      // FIX C2: mensaje diferenciado
+      console.error('[Fichaje] Error:', err);
       toast(mensajeError(err), 'error');
-      btn.disabled = false;
-      console.error(err);
+    } finally {
+      // GARANTÍA: Siempre recuperamos el botón pase lo que pase
+      if (loader) loader.style.display = 'none';
+      if (btnText) btnText.textContent = State.estado === 'EN_JORNADA' ? 'Fichar Salida' : 'Fichar Entrada';
+      if (btn) btn.disabled = false;
+      this.renderEstado({ estado: State.estado, nombre: State.nombre });
     }
   },
 
@@ -657,65 +691,57 @@ const App = {
   // si el botón manual ya fichó mientras tanto.
   async ficharAutomatico(tipoEsperado) {
     if (!State.pin || State.procesoActivo) return;
+
+    // 1. Seguro de enfriamiento
+    const ahora = Date.now();
+    if (ahora - State.ultimoFichajeAuto < 300000) {
+      console.log('[Geo] Enfriamiento activo (5 min)');
+      return;
+    }
+
     State.procesoActivo = true;
 
-    // Doble-check: releer estado del servidor antes de actuar
     try {
+      // 2. Doble-check de estado en servidor
       const check = await apiGet({ accion: 'estado', pin: State.pin });
-      if (!check.ok) return;
+      if (!check.ok) throw new Error('Servidor no disponible');
+      
       const estadoActual = check.data.estado;
-      // Si ya está en el estado correcto, no hace falta fichar
-      if (tipoEsperado === 'ENTRADA' && estadoActual !== 'LIBRE')     return;
+      if (tipoEsperado === 'ENTRADA' && estadoActual !== 'LIBRE') return;
       if (tipoEsperado === 'SALIDA'  && estadoActual !== 'EN_JORNADA') return;
-      // Actualizar estado local por si el manual lo cambió
-      this.renderEstado(check.data);
-    } catch (_) { return; }
 
-    // Obtener coordenadas actuales
-    let latitud = '', longitud = '';
-    try {
-      const pos = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 10000 })
-      );
-      latitud  = pos.coords.latitude;
-      longitud = pos.coords.longitude;
-    } catch (_) {}
+      // 3. Geolocalización
+      let latitud = '', longitud = '';
+      try {
+        const pos = await new Promise((res, rej) =>
+          navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, maximumAge: 30000 })
+        );
+        latitud  = pos.coords.latitude;
+        longitud = pos.coords.longitude;
+      } catch (_) { /* Omitimos geo si falla en modo automático */ }
 
-    try {
+      // 4. Ejecución del fichaje
       const resp = await apiPost({
         accion: 'fichar', pin: State.pin, latitud, longitud,
-        observaciones: 'Fichaje automático por geolocalización'
+        observaciones: 'Auto-fichaje GPS'
       });
 
-      if (!resp.ok) {
-        toast('⚠️ No se pudo registrar el fichaje automático: ' + (resp.error || ''), 'error', 5000);
-        return;
+      if (resp.ok) {
+        toast(`📍 Auto-${tipoEsperado === 'ENTRADA' ? 'Entrada' : 'Salida'} registrada`, 'success');
+        State.ultimoFichajeAuto = Date.now();
+        this.renderEstado({
+          estado: (resp.data.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE'),
+          nombre: State.nombre,
+          ultimaAccion: { tipo: resp.data.tipo, hora: resp.data.hora }
+        });
+        haptic();
+        setTimeout(() => this.cargarHistorial(), 4000);
       }
 
-      const tipo       = resp.data.tipo;
-      const nuevoEstado = tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE';
-      this.renderEstado({
-        estado: nuevoEstado,
-        nombre: State.nombre,
-        ultimaAccion: { tipo, hora: resp.data.hora }
-      });
-
-      State.ultimoFichajeAuto = Date.now();
-      const msg = tipo === 'ENTRADA'
-        ? `✅ Entrada automática registrada a las ${resp.data.hora}`
-        : `✅ Salida automática registrada a las ${resp.data.hora}`;
-      toast(msg, 'success', 5000);
-      haptic();
-
-      setTimeout(() => {
-        this.refrescarEstadoConGuardia(nuevoEstado);
-        this.cargarHistorial();
-      }, 4000);
-
     } catch (err) {
-      toast('⚠️ Error en fichaje automático: ' + mensajeError(err), 'error', 5000);
-      console.error('ficharAutomatico error:', err);
+      console.error('[Geo] Error en proceso automático:', err);
     } finally {
+      // LIBERACIÓN DEL SISTEMA: Crucial para evitar parones
       State.procesoActivo = false;
     }
   },

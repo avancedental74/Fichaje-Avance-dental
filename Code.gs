@@ -53,7 +53,7 @@ function inicializarHoja(hoja, nombre) {
   const headers = {
     [CONFIG.HOJAS.EMPLEADOS]: [
       'ID','Nombre','PIN','Activo','FechaAlta','Email','DNI','Puesto',
-      'Turno1_Entrada','Turno1_Salida','Turno2_Entrada','Turno2_Salida'
+      'Turno1_Entrada','Turno1_Salida','Turno2_Entrada','Turno2_Salida','Push_Token'
     ],
     [CONFIG.HOJAS.REGISTROS]: [
       'ID_Registro','ID_Empleado','Nombre_Empleado','Tipo',
@@ -103,13 +103,29 @@ function doGet(e) {
     switch (accion) {
       case 'estado':          return jsonResponse(accionEstado(params));
       case 'historial':       return jsonResponse(accionHistorial(params));
-      case 'check_setup':     return jsonResponse(accionCheckSetup());
+      case 'check_setup':     
+        verificarYActualizarColumnas(); // ← Actualización automática aquí
+        return jsonResponse(accionCheckSetup());
       case 'ping':            return jsonResponse(respOk({ msg: 'OK', empresa: CONFIG.NOMBRE_EMPRESA }));
       default:                return jsonResponse(respErr('Acción no reconocida'));
     }
   } catch(err) {
     console.error('doGet error:', err.message);
     return jsonResponse(respErr('Error interno: ' + err.message));
+  }
+}
+
+// ── FUNCIÓN PARA AÑADIR COLUMNAS AUTOMÁTICAMENTE ──────────────
+function verificarYActualizarColumnas() {
+  const hoja = getSheet(CONFIG.HOJAS.EMPLEADOS);
+  const headers = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+  
+  if (!headers.includes('Push_Token')) {
+    hoja.getRange(1, headers.length + 1).setValue('Push_Token')
+        .setFontWeight('bold')
+        .setBackground('#1a1a2e')
+        .setFontColor('#ffffff');
+    console.log('Columna Push_Token añadida automáticamente');
   }
 }
 
@@ -145,6 +161,7 @@ function doPost(e) {
       case 'admin_nuevo_empleado':    return jsonResponse(accionNuevoEmpleado(body));
       case 'admin_editar_empleado':   return jsonResponse(accionEditarEmpleado(body));
       case 'admin_toggle_empleado':   return jsonResponse(accionToggleEmpleado(body));
+      case 'guardar_token':           return jsonResponse(accionGuardarToken(body));
 
       case 'bootstrap_admin':         return jsonResponse(respErr('No necesario en esta versión'));
       default:                        return jsonResponse(respErr('Acción POST no reconocida'));
@@ -185,10 +202,26 @@ function buscarEmpleadoPorID(idEmpleado) {
   const datos = hoja.getDataRange().getValues();
   for (let i = 1; i < datos.length; i++) {
     if (datos[i][0] === idEmpleado) {
-      return { fila: i + 1, id: datos[i][0], nombre: datos[i][1], activo: datos[i][3] };
+      return { 
+        fila: i + 1, 
+        id: datos[i][0], 
+        nombre: datos[i][1], 
+        activo: datos[i][3],
+        pushToken: datos[i][12] || null 
+      };
     }
   }
   return null;
+}
+
+function accionGuardarToken(body) {
+  const { pin, token } = body;
+  if (!pin || !token) return respErr('Faltan datos');
+  const empleado = buscarEmpleadoPorPIN(pin);
+  if (!empleado) return respErr('PIN inválido');
+  const hoja = getSheet(CONFIG.HOJAS.EMPLEADOS);
+  hoja.getRange(empleado.fila, 13).setValue(JSON.stringify(token));
+  return respOk({ mensaje: 'Notificaciones activadas correctamente' });
 }
 
 // ============================================================
@@ -683,18 +716,13 @@ function formatRegistro(fila) {
 }
 
 function formatFecha(date) {
-  const d   = new Date(date);
-  const año = d.getFullYear();
-  const mes = String(d.getMonth() + 1).padStart(2, '0');
-  const dia = String(d.getDate()).padStart(2, '0');
-  return `${año}-${mes}-${dia}`;
+  const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  return Utilities.formatDate(new Date(date), tz, "yyyy-MM-dd");
 }
 
 function formatHora(date) {
-  const d = new Date(date);
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+  const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+  return Utilities.formatDate(new Date(date), tz, "HH:mm");
 }
 
 // ── NORMALIZAR FECHA ──────────────────────────────────────────

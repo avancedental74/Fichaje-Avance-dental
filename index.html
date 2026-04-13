@@ -127,6 +127,12 @@
       ⚠️ <b>Fichaje Automático:</b> Debes ir a <i>Ajustes > Ubicación</i> del móvil y elegir <b>"Permitir todo el tiempo"</b> para que funcione con la app cerrada.
     </div>
 
+    <!-- Botón Activar Recordatorios (iOS/PWA) -->
+    <div id="pushPrompt" style="display:none; background:var(--surface-2); padding:15px; border-bottom:1px solid var(--border); text-align:center;">
+       <p style="font-size:13px; margin-bottom:10px;">🔔 ¿Quieres recibir avisos si olvidas fichar?</p>
+       <button class="btn btn-entrada" onclick="App.activarNotificaciones()" style="width:auto; padding:8px 20px; font-size:13px;">Activar Recordatorios</button>
+    </div>
+
     <!-- Estado actual -->
     <div class="status-display" id="statusDisplay">
       <div class="status-icon libre" id="statusIcon" aria-hidden="true">

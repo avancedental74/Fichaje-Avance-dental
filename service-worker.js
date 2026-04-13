@@ -7,7 +7,7 @@
 //  · Solo activo Lunes–Viernes, dentro de ventanas de turno
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-v5.1';
+const CACHE_NAME    = 'fichaje-v4.0-final';
 const STATIC_ASSETS = [
   './index.html', './admin.html', './styles.css',
   './app.js', './admin.js', './manifest.json',
