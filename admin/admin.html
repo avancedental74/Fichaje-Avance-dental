@@ -19,7 +19,7 @@
   <link rel="apple-touch-icon" sizes="192x192" href="../admin-icon-192.png">
 
   <!-- PWA manifest -->
-  <link rel="manifest" href="manifest-admin.json">
+  <link rel="manifest" href="manifest-admin.json?v=3.0">
   <link rel="icon" type="image/png" href="../admin-icon-192.png">
 
   <!-- Fuentes + CSS -->
@@ -27,8 +27,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Fuente Sora cargada aquí (no en @import del CSS) para evitar bloqueo de renderizado -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap">
-  <link rel="stylesheet" href="../styles.css">
-  <link rel="preload" href="admin.js" as="script">
+  <link rel="stylesheet" href="../styles.css?v=3.0">
+  <link rel="preload" href="admin.js?v=3.0" as="script">
 </head>
 <body>
 
@@ -646,7 +646,7 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="admin.js?v=2.3"></script>
+<script src="admin.js?v=3.0"></script>
 <script>
   // ── PWA INSTALL ─────────────────────────────────────────────
   let deferredPrompt;
