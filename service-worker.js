@@ -290,13 +290,15 @@ function calcularVentanaActual(turnos) {
     const entrada = horaAMinutos(turno.entrada);
     const salida  = horaAMinutos(turno.salida);
 
-    // Ventana de entrada: 15 min antes → 60 min después de la hora de entrada
-    if (ahora >= entrada - 15 && ahora <= entrada + 60) {
+    // Ventana de entrada: 45 min antes → 90 min después de la hora de entrada
+    // (Ampliado para detectar llegadas tempranas y retrasos)
+    if (ahora >= entrada - 45 && ahora <= entrada + 90) {
       return { tipo: 'ENTRADA', entrada: turno.entrada, salida: turno.salida };
     }
 
-    // Ventana de salida: 60 min antes → 60 min después de la hora de salida
-    if (ahora >= salida - 60 && ahora <= salida + 60) {
+    // Ventana de salida: 60 min antes → 120 min después de la hora de salida
+    // (Ampliado para cirugías/pacientes que se alargan)
+    if (ahora >= salida - 60 && ahora <= salida + 120) {
       return { tipo: 'SALIDA', entrada: turno.entrada, salida: turno.salida };
     }
   }
@@ -511,12 +513,16 @@ async function mostrarNotificacion(titulo, cuerpo, accion, lat, lng) {
     body:    cuerpo,
     icon:    './icon-192.png',
     badge:   './icon-192.png',
-    vibrate: [100, 50, 100],
+    vibrate: [200, 100, 200, 100, 400], // Patrón más fuerte
     tag:     'fichaje-geo',
     renotify: true,
+    requireInteraction: true, // No desaparece hasta que el usuario la toque
+    priority: 2, // Prioridad máxima en navegadores compatibles
     data:    { accion, lat, lng },
     ...(accion ? {
-      actions: [{ action: 'fichar', title: '✅ Confirmar' }]
+      actions: [
+        { action: 'fichaje', title: `✅ Fichar ${accion.toLowerCase()}` }
+      ]
     } : {})
   };
   await self.registration.showNotification(titulo, opciones);

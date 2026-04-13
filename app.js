@@ -99,11 +99,52 @@ function esDiaLaboral() {
 
 // Pedir permiso de notificaciones (necesario para iOS 16.4+ y Android)
 async function pedirPermisoNotificaciones() {
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    const { LocalNotifications } = window.Capacitor.Plugins;
+    const status = await LocalNotifications.requestPermissions();
+    return status.display === 'granted';
+  }
   if (!('Notification' in window)) return false;
   if (Notification.permission === 'granted') return true;
-  if (Notification.permission === 'denied')  return false;
   const result = await Notification.requestPermission();
   return result === 'granted';
+}
+
+// Función unificada para mostrar notificaciones (Nativa o Web)
+async function mostrarNotificacionApp(titulo, cuerpo, accion) {
+  console.log('[App] Lanzando notificación:', titulo, cuerpo);
+  
+  if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    const { LocalNotifications } = window.Capacitor.Plugins;
+    await LocalNotifications.schedule({
+      notifications: [{
+        id: Math.floor(Date.now() / 1000),
+        title: titulo,
+        body: cuerpo,
+        largeIcon: 'res://icon_notification', // Icono para Android
+        smallIcon: 'res://icon_notification',
+        sound: 'res://notification_sound',
+        vibration: true,
+        priority: 2, // High priority
+        extra: { accion },
+        actionTypeId: 'fichaje-action'
+      }]
+    });
+    return;
+  }
+
+  // Fallback Web / Service Worker
+  if ('Notification' in window && Notification.permission === 'granted') {
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification(titulo, {
+      body: cuerpo,
+      icon: './icon-192.png',
+      vibrate: [200, 100, 200],
+      requireInteraction: true,
+      tag: 'fichaje-update',
+      data: { accion }
+    });
+  }
 }
 
 // Registrar Periodic Background Sync (solo Chrome Android, PWA instalada)
@@ -147,11 +188,62 @@ function notificarEstadoSW() {
 
 function iniciarGeofencing() {
   if (!GEO.habilitado || !navigator.geolocation) return;
-  if (!esDiaLaboral()) {
-    actualizarGeoBanner('finde', 0);
+  verificarNecesidadGps();
+}
+
+function verificarNecesidadGps() {
+  if (!esDiaLaboral() || !State.pin) {
+    if (_geoInicializado) detenerGeofencing();
     return;
   }
-  _geoInicializado = false;
+
+  // REGLA DE ORO: Si está en jornada, el GPS debe estar ENCENDIDO para detectar la salida, 
+  // no importa la hora que sea (por si se retrasan con un paciente).
+  if (State.estado === 'EN_JORNADA') {
+    if (!_geoInicializado) {
+      console.log('[GPS] Usuario en jornada. Activando vigilancia de salida...');
+      arrancarGpsReal();
+    }
+    return;
+  }
+
+  // Si está LIBRE, comprobamos si estamos cerca (30 min) de algún turno de ENTRADA
+  const ahora = new Date();
+  const minsAhora = ahora.getHours() * 60 + ahora.getMinutes();
+  let cercaDeEntrada = false;
+
+  if (!State.turnos || State.turnos.length === 0) {
+     if (!_geoInicializado) arrancarGpsReal();
+     return;
+  }
+
+  for (const t of State.turnos) {
+    const mEntrada = horaAMinutos(t.entrada);
+    // Ventana de seguridad de 30 minutos antes de entrar
+    if (minsAhora >= mEntrada - 30 && minsAhora <= mEntrada + 20) {
+       cercaDeEntrada = true; break;
+    }
+  }
+
+  if (cercaDeEntrada && !_geoInicializado) {
+    console.log('[GPS] Cerca de hora de entrada. Activando...');
+    arrancarGpsReal();
+  } else if (!cercaDeEntrada && _geoInicializado) {
+    console.log('[GPS] Fuera de horario y ya fichado. Durmiendo GPS...');
+    detenerGeofencing();
+  }
+}
+
+// Auxiliares de tiempo
+function horaAMinutos(horaStr) {
+  if (!horaStr) return 0;
+  const [h, m] = horaStr.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function arrancarGpsReal() {
+  if (_geoInicializado) return;
+  _geoInicializado = true;
 
   // Pedir permiso de notificaciones (no bloqueante)
   pedirPermisoNotificaciones();
@@ -162,8 +254,10 @@ function iniciarGeofencing() {
   // Sincronizar sesión con el SW
   sincronizarSW();
 
-  // NOTA: el listener 'message' del SW ya está registrado en App.init()
-  // No se vuelve a añadir aquí para evitar duplicados en cada login
+  // Comprobar cada minuto si hay que encender/apagar el GPS
+  if (!State._timerVentana) {
+    State._timerVentana = setInterval(() => verificarNecesidadGps(), 60000);
+  }
 
   // --- LÓGICA CAPACITOR NATIVA (Android APK) ---
   if (window.Capacitor && window.Capacitor.isNativePlatform()) {
@@ -728,7 +822,13 @@ const App = {
       });
 
       if (resp.ok) {
-        toast(`📍 Auto-${tipoEsperado === 'ENTRADA' ? 'Entrada' : 'Salida'} registrada`, 'success');
+        const emoji = tipoEsperado === 'ENTRADA' ? '🟢' : '🔴';
+        const titulo = `Auto-${tipoEsperado === 'ENTRADA' ? 'Entrada' : 'Salida'} OK`;
+        const cuerpo = `${emoji} Has fichado en ${EMPRESA_NOMBRE} a las ${resp.data.hora}`;
+        
+        mostrarNotificacionApp(titulo, cuerpo, null);
+        toast(`📍 ${cuerpo}`, 'success', 6000);
+        
         State.ultimoFichajeAuto = Date.now();
         this.renderEstado({
           estado: (resp.data.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE'),
