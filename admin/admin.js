@@ -49,6 +49,13 @@ function mensajeError(err) {
   return 'Error inesperado. Inténtalo de nuevo.';
 }
 
+function sanitizar(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 // ── API ──────────────────────────────────────────────────────
 
 // apiGet: solo para peticiones SIN credenciales (caché buster público)
@@ -244,7 +251,7 @@ const Admin = {
               <div class="vacation-banner" style="margin-bottom:15px; border-style:dashed; background:rgba(255,167,38,0.05);">
                 <div class="vacation-icon">📅</div>
                 <div class="vacation-info">
-                  <strong style="color:var(--admin)">Día Especial: ${sanitizar ? sanitizar(diaE.tipo) : diaE.tipo}</strong>
+                  <strong style="color:var(--admin)">Día Especial: ${sanitizar(diaE.tipo)}</strong>
                   <span>Este empleado tiene este día marcado en su calendario de ausencias.</span>
                 </div>
               </div>
