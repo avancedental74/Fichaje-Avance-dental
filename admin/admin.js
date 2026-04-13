@@ -176,6 +176,19 @@ const Admin = {
   inicializar(empleados) {
     document.getElementById('filtroFecha').value = fechaHoy();
 
+    // 1. Selector de la pestaña REGISTROS
+    const selR = document.getElementById('filtroEmpleado');
+    if (selR) {
+      selR.innerHTML = '<option value="">Todos los empleados</option>';
+      empleados.filter(e => e.activo).forEach(e => {
+        const opt = document.createElement('option');
+        opt.value       = e.id;
+        opt.textContent = e.nombre;
+        selR.appendChild(opt);
+      });
+    }
+
+    // 2. Selector de la pestaña CALENDARIO
     const selC = document.getElementById('calEmpleado');
     if (selC) {
       selC.innerHTML = '<option value="">Selecciona un empleado...</option>';
@@ -185,7 +198,6 @@ const Admin = {
         opt.textContent = e.nombre;
         selC.appendChild(opt);
       });
-      // Listener para cargar calendario automático al cambiar empleado
       selC.onchange = () => this.cargarCalendario();
     }
 
