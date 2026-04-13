@@ -167,6 +167,22 @@ function iniciarGeofencing() {
 
   // --- LÓGICA CAPACITOR NATIVA (Android APK) ---
   if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+    console.log('[Native] Comprobando permisos...');
+    
+    // Función para intentar saltar a los ajustes si falta permiso
+    const forzarPermisos = async () => {
+      try {
+        const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
+        // mostramos el aviso visual por si acaso
+        document.getElementById('bgPermissionAlert').style.display = 'block';
+        // Esto abrirá el pop-up nativo de permisos. 
+        // En Android 11+, si el usuario ya dio "mientras se usa", 
+        // esto debería llevarle a la pantalla de Ajustes.
+        await BackgroundGeolocation.requestPermissions();
+      } catch (e) { console.warn(e); }
+    };
+    
+    forzarPermisos();
     console.log('[Native] Activando BackgroundGeolocation nativo...');
     try {
       const BackgroundGeolocation = window.Capacitor.Plugins.BackgroundGeolocation;
@@ -177,11 +193,11 @@ function iniciarGeofencing() {
       }
 
       BackgroundGeolocation.addWatcher({
-        backgroundMessage: "Rastreo de ubicación activo para el fichaje automático.",
-        backgroundTitle: "Fichaje Laboral",
+        backgroundMessage: "Vigilando entrada/salida para el fichaje automático.",
+        backgroundTitle: "Fichaje Laboral Activo",
         requestPermissions: true,
         stale: false,
-        distanceFilter: 30 // segundos/metros aproximados
+        distanceFilter: 10 // Más frecuencia para evitar que Android lo duerma
       }, (location, error) => {
         if (error) {
           console.error('[Native] Error GPS:', error);
