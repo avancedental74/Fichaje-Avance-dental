@@ -1,22 +1,21 @@
 // ============================================================
-//  FICHAJE LABORAL — service-worker.js (ADMIN)  v5.0
+//  FICHAJE LABORAL — service-worker.js (ADMIN)  v6.0
 //  Scope: /Fichaje-Avance-dental/admin/
-//  Solo cachea los archivos del panel admin
 // ============================================================
 
-const CACHE_NAME    = 'fichaje-admin-v5.0';
+const CACHE_NAME    = 'fichaje-admin-v6.0';
 const STATIC_ASSETS = [
   './admin.html',
   './admin.js',
-  './styles.css',
+  '../styles.css',
   './manifest-admin.json',
   './admin-icon-192.png',
-  './admin-icon-512.png',
   'https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap'
 ];
 
 // ── INSTALL ──────────────────────────────────────────────────
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
       Promise.allSettled(
@@ -24,18 +23,18 @@ self.addEventListener('install', event => {
           cache.add(url).catch(e => console.warn('[SW Admin] No cacheable:', url, e))
         )
       )
-    ).then(() => self.skipWaiting())
+    )
   );
 });
 
 // ── ACTIVATE ─────────────────────────────────────────────────
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
+    caches.keys().then(keys => Promise.all(
+      keys.map(k => {
+        if (k !== CACHE_NAME) return caches.delete(k);
+      })
+    )).then(() => self.clients.claim())
   );
 });
 
@@ -43,30 +42,39 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
-  if (request.method !== 'GET') return;
-  if (url.hostname.includes('script.google.com')) return;
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    event.respondWith(staleWhileRevalidate(request)); return;
+
+  // No cachear POST ni peticiones al backend de Google
+  if (request.method !== 'GET' || url.hostname.includes('script.google.com')) return;
+
+  // Estrategia: Network First para archivos críticos, Cache First para el resto
+  if (url.pathname.endsWith('admin.html') || url.pathname.endsWith('admin.js')) {
+    event.respondWith(networkFirst(request));
+  } else {
+    event.respondWith(cacheFirst(request));
   }
-  event.respondWith(cacheFirst(request));
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const fresh = await fetch(req);
+    if (fresh.ok) cache.put(req, fresh.clone());
+    return fresh;
+  } catch (e) {
+    const cached = await cache.match(req);
+    return cached || new Response('Sin conexión', { status: 503 });
+  }
+}
 
 async function cacheFirst(req) {
   const cached = await caches.match(req);
   if (cached) return cached;
+  const cache = await caches.open(CACHE_NAME);
   try {
-    const net = await fetch(req);
-    if (net.ok) { const c = await caches.open(CACHE_NAME); c.put(req, net.clone()); }
-    return net;
-  } catch (_) {
-    if (req.destination === 'document') return await caches.match('./admin.html') || new Response('Sin conexión', { status: 503 });
+    const fresh = await fetch(req);
+    if (fresh.ok) cache.put(req, fresh.clone());
+    return fresh;
+  } catch (e) {
     return new Response('Sin conexión', { status: 503 });
   }
-}
-
-async function staleWhileRevalidate(req) {
-  const cache  = await caches.open(CACHE_NAME);
-  const cached = await cache.match(req);
-  const netP   = fetch(req).then(r => { if (r.ok) cache.put(req, r.clone()); return r; }).catch(() => null);
-  return cached || netP;
 }
