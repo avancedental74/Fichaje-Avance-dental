@@ -15,7 +15,8 @@
     "@capacitor-community/background-geolocation": "^1.2.26",
     "@capacitor/android": "^6.2.1",
     "@capacitor/cli": "^6.2.1",
-    "@capacitor/core": "^6.2.1"
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/local-notifications": "^8.0.2"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5"

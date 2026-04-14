@@ -343,8 +343,27 @@ function arrancarGpsReal() {
 }
 
 // Función común para procesar coordenadas (Nativas o Web)
-function processGeoUpdate(lat, lng) {
+async function processGeoUpdate(lat, lng) {
   if (!esDiaLaboral()) return;
+
+  // RESTAURACIÓN DE ESTADO EN BACKGROUND (App cerrada)
+  if (!State.pin) {
+    const pinGuardado = localStorage.getItem('fichaje_pin');
+    if (pinGuardado) {
+      State.pin = pinGuardado;
+      try {
+        const check = await apiGet({ accion: 'estado', pin: State.pin });
+        if (check.ok) {
+          State.estado   = check.data.estado;
+          State.nombre   = check.data.nombre;
+          State.especial = check.data.especial;
+          State.turnos   = check.data.turnos || [];
+        } else return;
+      } catch (e) { return; } // Sin red no podemos seguir
+    } else return; // Sin PIN guardado
+  }
+
+  if (State.especial) return; // Vacaciones/Festivo
 
   const dist = haversineMetros(lat, lng, GEO.lat, GEO.lng);
 
@@ -364,7 +383,7 @@ function processGeoUpdate(lat, lng) {
     dentro = dist <= radioEntrada;
   }
 
-  actualizarGeoBanner(dentro, Math.round(dist));
+  try { actualizarGeoBanner(dentro, Math.round(dist)); } catch(e) {}
 
   if (dentro === State.dentroDelCentro) return;
   State.dentroDelCentro = dentro;
@@ -372,8 +391,8 @@ function processGeoUpdate(lat, lng) {
   const necesitaEntrada = dentro  && State.estado === 'LIBRE';
   const necesitaSalida  = !dentro && State.estado === 'EN_JORNADA';
   
-  if (necesitaEntrada) App.ficharAutomatico('ENTRADA');
-  if (necesitaSalida)  App.ficharAutomatico('SALIDA');
+  if (necesitaEntrada) await App.ficharAutomatico('ENTRADA');
+  if (necesitaSalida)  await App.ficharAutomatico('SALIDA');
 }
 
 function detenerGeofencing() {
@@ -606,6 +625,7 @@ const App = {
       this.iniciarReloj();
       this.cargarHistorial();
       iniciarGeofencing();
+      this.programarRecordatoriosNativos();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
       document.getElementById('voice-btn').style.display = 'flex';
@@ -654,6 +674,7 @@ const App = {
       this.iniciarReloj();
       this.cargarHistorial();
       iniciarGeofencing();
+      this.programarRecordatoriosNativos();
       showPage('page-empleado');
       document.getElementById('logoutBtn').style.display = '';
       document.getElementById('voice-btn').style.display = 'flex';
@@ -742,6 +763,59 @@ const App = {
       btnText.textContent  = '▶ Registrar Entrada';
       subTexto.textContent = 'Inicia tu jornada laboral';
       btn.disabled         = false;
+    }
+  },
+
+  // ── RECORDATORIOS NATIVOS (Alarmas Locales) ────────────────
+  async programarRecordatoriosNativos() {
+    if (!window.Capacitor || !window.Capacitor.isNativePlatform()) return;
+    if (!State.turnos || State.turnos.length === 0) return;
+    
+    try {
+      const { LocalNotifications } = window.Capacitor.Plugins;
+      
+      // 1. Limpiar recordatorios anteriores (evita duplicados)
+      const pending = await LocalNotifications.getPending();
+      if (pending && pending.notifications && pending.notifications.length > 0) {
+        await LocalNotifications.cancel({ notifications: pending.notifications });
+      }
+      
+      // Si hoy es fiesta o vacaciones, cancelamos y salimos
+      if (State.especial) return;
+      
+      const notifsToSchedule = [];
+      let idCounter = 100;
+      
+      for (const turno of State.turnos) {
+        if (turno.entrada) {
+          const [h, m] = turno.entrada.split(':').map(Number);
+          notifsToSchedule.push({
+            id: idCounter++,
+            title: '🟢 Hora de fichar Entrada',
+            body: `${State.nombre}, es el momento de registrar tu entrada.`,
+            schedule: { on: { hour: h, minute: m }, allowWhileIdle: true },
+            smallIcon: 'res://icon_notification'
+          });
+        }
+        if (turno.salida) {
+          const [h, m] = turno.salida.split(':').map(Number);
+          notifsToSchedule.push({
+            id: idCounter++,
+            title: '🔴 Hora de fichar Salida',
+            body: `${State.nombre}, es tu hora de salida. ¡No lo olvides!`,
+            schedule: { on: { hour: h, minute: m }, allowWhileIdle: true },
+            smallIcon: 'res://icon_notification'
+          });
+        }
+      }
+      
+      if (notifsToSchedule.length > 0) {
+        // En Android esto programa alarmas exactas que suenan aunque la app esté cerrada
+        await LocalNotifications.schedule({ notifications: notifsToSchedule });
+        console.log('[App] Recordatorios nativos programados:', notifsToSchedule.length);
+      }
+    } catch(e) {
+      console.warn('[App] Fallo programando alarmas nativas:', e);
     }
   },
 
@@ -853,16 +927,20 @@ const App = {
         const cuerpo = `${emoji} Has fichado en ${EMPRESA_NOMBRE} a las ${resp.data.hora}`;
         
         mostrarNotificacionApp(titulo, cuerpo, null);
-        toast(`📍 ${cuerpo}`, 'success', 6000);
+        try { toast(`📍 ${cuerpo}`, 'success', 6000); } catch(e) {}
         
         State.ultimoFichajeAuto = Date.now();
-        this.renderEstado({
-          estado: (resp.data.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE'),
-          nombre: State.nombre,
-          ultimaAccion: { tipo: resp.data.tipo, hora: resp.data.hora }
-        });
-        haptic();
-        setTimeout(() => this.cargarHistorial(), 4000);
+        try {
+          this.renderEstado({
+            estado: (resp.data.tipo === 'ENTRADA' ? 'EN_JORNADA' : 'LIBRE'),
+            nombre: State.nombre,
+            ultimaAccion: { tipo: resp.data.tipo, hora: resp.data.hora }
+          });
+          haptic();
+          setTimeout(() => this.cargarHistorial(), 4000);
+        } catch(e) {
+          // Ignorar errores UI si estamos en ejecución headless (app cerrada)
+        }
       }
 
     } catch (err) {
